@@ -1,0 +1,99 @@
+/* =============================================================
+   MEDISFARMA | visor_styles.css
+   Dashboard de seguimiento, novedades, inventario y mÃ©tricas
+   ============================================================= */
+
+:root {
+  --mf-azul: #0d6efd;
+  --mf-azul-osc: #0a4fb5;
+  --mf-verde: #2fb457;
+  --mf-gris: #f4f7fb;
+  --mf-borde: #dbe4f0;
+  --mf-rojo: #dc3545;
+  --mf-ambar: #ffc107;
+}
+
+body { background: var(--mf-gris); font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #1f2d3d; }
+
+.mf-navbar {
+  background: linear-gradient(90deg, var(--mf-azul) 0%, var(--mf-verde) 100%);
+  color: #fff; box-shadow: 0 2px 10px rgba(13, 110, 253, .25);
+}
+.mf-logo { height: 48px; background: #fff; border-radius: 8px; padding: 4px 8px; }
+.mf-titulo { font-weight: 700; line-height: 1.1; }
+.mf-sub { font-size: .75rem; opacity: .9; }
+
+/* ---------- KPI ---------- */
+.kpi-card {
+  background: #fff; border: 1px solid var(--mf-borde); border-radius: 14px;
+  padding: 14px 16px; height: 100%;
+  box-shadow: 0 4px 14px rgba(31, 45, 61, .05);
+  border-left: 5px solid var(--mf-azul);
+}
+.kpi-card.verde { border-left-color: var(--mf-verde); }
+.kpi-card.rojo  { border-left-color: var(--mf-rojo); }
+.kpi-card.ambar { border-left-color: var(--mf-ambar); }
+.kpi-label { font-size: .74rem; text-transform: uppercase; letter-spacing: .4px; color: #6b7a90; font-weight: 700; }
+.kpi-valor { font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.kpi-detalle { font-size: .74rem; color: #8a97a8; }
+
+/* ---------- Paneles ---------- */
+.mf-panel {
+  background: #fff; border: 1px solid var(--mf-borde); border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(31, 45, 61, .05); margin-bottom: 20px;
+}
+.mf-panel-header {
+  padding: 12px 18px; font-weight: 700; border-bottom: 1px solid var(--mf-borde);
+  background: #fbfdff; border-radius: 14px 14px 0 0;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.mf-panel-body { padding: 16px 18px; }
+
+/* ---------- Tablas ---------- */
+.tabla-visor { font-size: .8rem; }
+.tabla-visor thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--mf-azul); color: #fff; white-space: nowrap; font-weight: 600;
+}
+.tabla-scroll { max-height: 460px; overflow: auto; border: 1px solid var(--mf-borde); border-radius: 10px; }
+.tabla-visor tbody tr:hover { background: #f1f7ff; }
+
+/* ---------- Alertas visuales ---------- */
+.fila-urgente-pendiente { background: #ffe3e3 !important; }
+.fila-urgente-pendiente td { font-weight: 600; color: #a31220; }
+.fila-diferencia { background: #ffecec !important; }
+.fila-cumplido { background: #f2fbf5; }
+.badge-urg { background: var(--mf-rojo); color: #fff; border-radius: 20px; padding: 2px 9px; font-size: .7rem; font-weight: 700; }
+.badge-est { border-radius: 20px; padding: 2px 9px; font-size: .7rem; font-weight: 700; }
+.est-cumplido { background: #d8f5e2; color: #14713a; }
+.est-transito { background: #dbeafe; color: #10458f; }
+.est-pendiente { background: #fff3cd; color: #7a5b00; }
+.est-novedad   { background: #ffd9dd; color: #a31220; }
+
+/* ---------- Filtros ---------- */
+.filtros-bar {
+  background: #eef6ff; border: 1px dashed var(--mf-azul); border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 16px;
+}
+.filtros-bar label { font-size: .74rem; font-weight: 700; color: var(--mf-azul-osc); text-transform: uppercase; }
+
+/* ---------- Graficas ---------- */
+.chart-box { position: relative; height: 280px; }
+
+@media (max-width: 768px) {
+  .kpi-valor { font-size: 1.35rem; }
+  .chart-box { height: 240px; }
+}
+
+/* ---------- Planilla de despachos (impresiÃ³n) ---------- */
+.solo-impresion { display: none; }
+
+@media print {
+  body { background: #fff; }
+  .mf-navbar, .filtros-bar, .mf-panel, #kpiRow, .modal, .row { display: none !important; }
+  .solo-impresion { display: block !important; }
+  .solo-impresion table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .solo-impresion th, .solo-impresion td { border: 1px solid #666; padding: 3px 4px; }
+  .solo-impresion thead th { background: #e8f0fe !important; -webkit-print-color-adjust: exact; }
+  @page { size: landscape; margin: 10mm; }
+}
