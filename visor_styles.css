@@ -13,7 +13,12 @@
   --mf-ambar: #ffc107;
 }
 
-body { background: var(--mf-gris); font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #1f2d3d; }
+body { background: var(--mf-gris); font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #1f2d3d; margin: 0; padding: 0; }
+
+/* Cuando el login esta activo, bloquear scroll del contenido detras */
+body.mf-login-activo {
+  overflow: hidden !important;
+}
 
 /* ---------- Toast ---------- */
 .mf-toast-wrap {
@@ -24,12 +29,18 @@ body { background: var(--mf-gris); font-family: "Segoe UI", Roboto, Arial, sans-
 /* ---------- Login overlay ---------- */
 .mf-login-overlay {
   position: fixed; inset: 0; z-index: 99999;
+  top: 0; left: 0; right: 0; bottom: 0;
   background: linear-gradient(135deg, #0d6efd 0%, #2fb457 100%);
   display: flex; align-items: center; justify-content: center;
+  overflow-y: auto;
 }
+}
+.mf-login-overlay.oculto { display: none !important; }
 .mf-login-box {
   background: #fff; border-radius: 18px; width: 94%; max-width: 440px;
   box-shadow: 0 8px 40px rgba(0,0,0,.35); overflow: hidden;
+  max-height: 90vh; max-height: 90dvh;
+  box-sizing: border-box;
 }
 .mf-login-header {
   background: linear-gradient(90deg, #0d6efd, #2fb457);
@@ -45,13 +56,19 @@ body { background: var(--mf-gris); font-family: "Segoe UI", Roboto, Arial, sans-
   border-radius: 8px; padding: 8px 12px; font-size: .85rem; margin-bottom: 12px; text-align: center;
 }
 .mf-login-btn {
-  width: 100%; padding: 12px; border: none; border-radius: 10px;
+  width: 100%; padding: 14px; border: none; border-radius: 10px;
   background: linear-gradient(90deg, #0d6efd, #2fb457);
   color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer;
   letter-spacing: 1px; transition: opacity .2s;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: manipulation;
+  position: relative;
+  z-index: 100000;
 }
 .mf-login-btn:hover { opacity: .9; }
-.mf-login-btn:active { transform: scale(.98); }
+.mf-login-btn:active { transform: scale(.97); opacity: .85; }
 .mf-login-footer {
   text-align: center; padding: 14px 20px; font-size: .75rem; color: #6b7a90;
   border-top: 1px solid #eee;
@@ -138,4 +155,4 @@ body { background: var(--mf-gris); font-family: "Segoe UI", Roboto, Arial, sans-
   .solo-impresion th, .solo-impresion td { border: 1px solid #666; padding: 3px 4px; }
   .solo-impresion thead th { background: #e8f0fe !important; -webkit-print-color-adjust: exact; }
   @page { size: landscape; margin: 10mm; }
-                                         }
+              }
