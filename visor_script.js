@@ -45,7 +45,8 @@ const CREDENCIALES_VISOR = {
   recibido_logistica: 'Medis2024Recib',
   planillar_logistica:'Medis2024Plan'
 };
-const LS_LOGIN_VISOR = 'MF_LOGIN_VISOR_OK';
+const LS_LOGIN_VISOR = 'MF_LOGIN_OK';
+const LS_PERFIL_VISOR = 'MF_PERFIL_ACTIVO';
 
 function verificarLoginVisor() {
   const usuario = val('loginUsuarioVisor');
@@ -58,7 +59,9 @@ function verificarLoginVisor() {
   }
   if (CREDENCIALES_VISOR[usuario] && CREDENCIALES_VISOR[usuario].toLowerCase() === clave.toLowerCase()) {
     localStorage.setItem(LS_LOGIN_VISOR, usuario);
+    localStorage.setItem(LS_PERFIL_VISOR, usuario);
     $('pantallaLoginVisor').style.display = 'none';
+    document.body.classList.remove('mf-login-activo');
     errDiv.style.display = 'none';
     toast('Sesion iniciada como <strong>' + (PERFILES_LABEL[usuario] || usuario) + '</strong>', 'success');
   } else {
@@ -71,7 +74,9 @@ function verificarLoginVisor() {
 
 function cerrarSesionVisor() {
   localStorage.removeItem(LS_LOGIN_VISOR);
+  localStorage.removeItem(LS_PERFIL_VISOR);
   $('pantallaLoginVisor').style.display = 'flex';
+  document.body.classList.add('mf-login-activo');
   $('loginUsuarioVisor').value = '';
   $('loginContrasenaVisor').value = '';
   $('loginErrorVisor').style.display = 'none';
@@ -779,8 +784,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginPrevio = localStorage.getItem(LS_LOGIN_VISOR);
   if (loginPrevio && CREDENCIALES_VISOR[loginPrevio]) {
     $('pantallaLoginVisor').style.display = 'none';
+    document.body.classList.remove('mf-login-activo');
   } else {
     $('pantallaLoginVisor').style.display = 'flex';
+    document.body.classList.add('mf-login-activo');
   }
 
   $('btnLoginVisor').addEventListener('click', verificarLoginVisor);
@@ -831,3 +838,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // Actualizacion automatica cada 5 minutos cuando hay conexion a Drive.
   setInterval(() => { if (!CONFIG.modoLocal && CONFIG.apiUrl) cargarDatos(); }, 300000);
 });
+
