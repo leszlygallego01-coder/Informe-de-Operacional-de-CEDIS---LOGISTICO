@@ -56,16 +56,26 @@
   </div>
 </div>
 
-<!-- ====== LOGIN EARLY-BIND SCRIPT (se ejecuta antes del JS externo) ====== -->
+<!-- ====== SISTEMA DE SESION UNIFICADO (se ejecuta antes del JS externo) ====== -->
 <script>
 (function(){
+  /* CREDENCIALES COMPARTIDAS CARGUE + VISOR */
   var CRED = {
     administrador:'Medis2024Admin', lider:'Medis2024Lider',
     auxiliar_entrega:'Medis2024Aux', recibido_logistica:'Medis2024Recib',
     planillar_logistica:'Medis2024Plan'
   };
-  var LS = 'MF_LOGIN_VISOR_OK';
+  var LABELS = {
+    administrador:'ADMINISTRADOR', lider:'LIDER',
+    auxiliar_entrega:'AUXILIAR ENTREGA',
+    recibido_logistica:'RECIBIDO LOGISTICA',
+    planillar_logistica:'PLANILLAR LOGISTICA'
+  };
+  /* CLAVES UNIFICADAS — CARGUE y VISOR comparten la misma sesion */
+  var LS_LOGIN  = 'MF_LOGIN_OK';
+  var LS_PERFIL = 'MF_PERFIL_ACTIVO';
 
+  /* ---------- LOGIN ---------- */
   function doLoginVisor(){
     var u = document.getElementById('loginUsuarioVisor');
     var p = document.getElementById('loginContrasenaVisor');
@@ -75,43 +85,86 @@
     var pv = p ? p.value.trim() : '';
     if(!uv){ if(e){e.style.display='block';e.textContent='Seleccione un perfil.';} return; }
     if(CRED[uv] && CRED[uv].toLowerCase()===pv.toLowerCase()){
-      localStorage.setItem(LS,uv);
-      localStorage.setItem('MF_PERFIL_VISOR_ACTIVO',uv);
+      localStorage.setItem(LS_LOGIN, uv);
+      localStorage.setItem(LS_PERFIL, uv);
       if(o) o.style.display='none';
       if(e) e.style.display='none';
       document.body.classList.remove('mf-login-activo');
-      /* Sincronizar selector de perfil en navbar si existe */
-      var sel=document.getElementById('selPerfilVisor'); if(sel) sel.value=uv;
-      /* Toast de bienvenida */
-      var tw=document.getElementById('toastWrap');
-      if(tw){var d=document.createElement('div');d.className='alert alert-success shadow-sm py-2 px-3 small';d.innerHTML='Sesion iniciada correctamente';tw.appendChild(d);setTimeout(function(){d.remove();},5000);}
+      showToast('Sesion iniciada como <strong>' + (LABELS[uv]||uv) + '</strong>', 'success');
     } else {
       if(e){e.style.display='block';e.textContent='Usuario o contrasena incorrectos';}
       if(p){p.value='';p.focus();}
     }
   }
 
-  var btn=document.getElementById('btnLoginVisor');
+  /* ---------- CIERRE DE SESION ---------- */
+  function doLogoutVisor(){
+    localStorage.removeItem(LS_LOGIN);
+    localStorage.removeItem(LS_PERFIL);
+    var o = document.getElementById('pantallaLoginVisor');
+    if(o) o.style.display = 'flex';
+    document.body.classList.add('mf-login-activo');
+    var u = document.getElementById('loginUsuarioVisor');
+    var p = document.getElementById('loginContrasenaVisor');
+    var e = document.getElementById('loginErrorVisor');
+    if(u) u.value = '';
+    if(p) p.value = '';
+    if(e) e.style.display = 'none';
+    showToast('Sesion cerrada correctamente.', 'info');
+  }
+
+  /* ---------- TOAST SIMPLE ---------- */
+  function showToast(msg, type){
+    var tw = document.getElementById('toastWrap');
+    if(!tw) return;
+    var d = document.createElement('div');
+    var bg = type==='success'?'alert-success':type==='danger'?'alert-danger':'alert-info';
+    d.className = 'alert ' + bg + ' shadow-sm py-2 px-3 small';
+    d.innerHTML = msg;
+    tw.appendChild(d);
+    setTimeout(function(){ if(d.parentNode) d.remove(); }, 5000);
+  }
+
+  /* ---------- REGISTRAR EVENTOS INMEDIATAMENTE ---------- */
+  var btn = document.getElementById('btnLoginVisor');
   if(btn){
-    btn.addEventListener('click',doLoginVisor);
-    btn.addEventListener('touchend',function(ev){
-      ev.preventDefault();
-      doLoginVisor();
+    btn.addEventListener('click', doLoginVisor);
+    btn.addEventListener('touchend', function(ev){
+      ev.preventDefault(); doLoginVisor();
     },{passive:false});
   }
-  var pw=document.getElementById('loginContrasenaVisor');
-  if(pw) pw.addEventListener('keydown',function(ev){if(ev.key==='Enter')doLoginVisor();});
+  var pw = document.getElementById('loginContrasenaVisor');
+  if(pw) pw.addEventListener('keydown', function(ev){ if(ev.key==='Enter') doLoginVisor(); });
+  /* Boton CERRAR SESION (puede no existir aun si la navbar no se parseo) */
+  function bindLogoutVisor(){
+    var btnOut = document.getElementById('btnCerrarSesionVisor');
+    if(btnOut && !btnOut._mfLogoutBound){
+      btnOut._mfLogoutBound = true;
+      btnOut.addEventListener('click', doLogoutVisor);
+      btnOut.addEventListener('touchend', function(ev){
+        ev.preventDefault(); doLogoutVisor();
+      },{passive:false});
+    }
+  }
+  bindLogoutVisor();
+  /* Reintentar despues de que todo el HTML se parse */
+  setTimeout(bindLogoutVisor, 100);
+  setTimeout(bindLogoutVisor, 500);
+  document.addEventListener('DOMContentLoaded', bindLogoutVisor);
 
-  var prev=localStorage.getItem(LS);
-  var o=document.getElementById('pantallaLoginVisor');
+  /* ---------- VERIFICAR SESION PREVIA ---------- */
+  var prev = localStorage.getItem(LS_LOGIN);
+  var o = document.getElementById('pantallaLoginVisor');
   if(prev && CRED[prev]){
-    if(o) o.style.display='none';
+    if(o) o.style.display = 'none';
     document.body.classList.remove('mf-login-activo');
   } else {
     document.body.classList.add('mf-login-activo');
   }
 
-  window._doLoginVisorEarly=doLoginVisor;
+  /* ---------- EXPORTAR A GLOBAL ---------- */
+  window._doLoginVisorEarly  = doLoginVisor;
+  window._doLogoutVisorEarly = doLogoutVisor;
 })();
 </script>
 
