@@ -386,6 +386,39 @@
     </div>
   </div>
 
+  <!-- ============================ SECCION 5 ============================ -->
+  <div class="mf-panel mf-panel-logistica">
+    <div class="mf-panel-header">
+      <span>5. LOGISTICA Y DESPACHO &mdash; Recepcion y Planilla de Lectura</span>
+      <span class="d-flex align-items-center gap-2">
+        <span class="small text-muted" id="info_s5"></span>
+        <button class="btn btn-sm btn-success" id="btnExportarLogistica">
+          &#8681; Exportar Logistica
+        </button>
+      </span>
+    </div>
+    <div class="mf-panel-body">
+      <div class="row g-2 mb-2">
+        <div class="col-md-2"><label class="small fw-bold">Zona</label>
+          <select class="form-select form-select-sm" id="f_zona_log">
+            <option value="">Todas</option>
+            <option>URABA</option><option>BAJO CAUCA</option><option>NORTE</option>
+            <option>MAGDALENA MEDIO</option><option>ORIENTE</option><option>SUROESTE</option>
+            <option>VALLE DE ABURRA</option><option>MEDIANA</option>
+          </select></div>
+        <div class="col-md-2"><label class="small fw-bold">Revisado</label>
+          <select class="form-select form-select-sm" id="f_revisado_log">
+            <option value="">Todos</option>
+            <option value="SI">Revisado</option>
+            <option value="NO">No Revisado</option>
+          </select></div>
+        <div class="col-md-6"><input class="form-control form-control-sm" id="buscar_s5" placeholder="Buscar por traslado, destino, responsable..."></div>
+      </div>
+      <div class="tabla-scroll"><table class="table table-sm table-bordered tabla-visor mb-0">
+        <thead><tr id="head_s5"></tr></thead><tbody id="body_s5"></tbody></table></div>
+    </div>
+  </div>
+
 </div>
 
 <!-- Area usada solo al imprimir la planilla de despachos -->
