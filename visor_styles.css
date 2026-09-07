@@ -266,3 +266,45 @@ body.mf-login-activo {
   .rot-col { max-width: 100%; }
   .mf-apertura-body { padding: 12px 14px; }
 }
+
+/* ---------- Logistica: badge Revisado SI / NO ---------- */
+.mf-revisado-si {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: .72rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--mf-verde);
+  letter-spacing: .3px;
+}
+.mf-revisado-no {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: .72rem;
+  font-weight: 700;
+  color: #fff;
+  background: #dc3545;
+  letter-spacing: .3px;
+}
+/* ---------- Logistica: boton Marcar Revisado ---------- */
+.btn-mf-revisado {
+  background: linear-gradient(135deg, var(--mf-verde) 0%, #1e8c3a 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: .72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform .1s;
+}
+.btn-mf-revisado:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1);
+}
+/* ---------- Logistica: panel accent ---------- */
+.mf-panel-logistica .card-header {
+  background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%) !important;
+}
