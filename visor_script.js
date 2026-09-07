@@ -12,7 +12,22 @@ const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 let CONFIG = Object.assign({
   apiUrl: '',
   modoLocal: true,
-  folders: { despachos: '', logistica: '', recepcion: '', novedades: '', inventario: '', facturacion: '' }
+  folders: {
+    despachos:   '1tUXm2FVVFWBnyeBrzTlRpobYTKxk7OH8',
+    logistica:   '1_e8ycbznm0jA4kOBwkJuXM4EVdcwXzYe',
+    recepcion:   '1u5aQURkwKw4CqxejzOSxYgeF6dvcj-T0',
+    novedades:   '1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-',
+    inventario:  '11Iml2ggmvAK8aHeUbDGeWbyhLxCtrPoY',
+    facturacion: '1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-',
+    backup:      '1HVTZyLasrbZArTN34kmc0lCKaQa2qQ_5'
+  },
+  perfiles: {
+    despachos:   { file: 'BD_PLANILLA_ENTREGA_DESPACHOS', sheet: 'DATOS' },
+    logistica:   { file: 'BD_LOGISTICA_DESPACHOS',         sheet: 'DATOS' },
+    recepcion:   { file: 'BD_RECEPCION_TECNICA',           sheet: 'DATOS' },
+    facturacion: { file: 'BD_FACTURA_TRANSPORTE',         sheet: 'DATOS' },
+    inventario:  { file: 'BD_VERIFICACION_INVENTARIO',     sheet: 'DATOS' }
+  }
 }, JSON.parse(localStorage.getItem(LS_KEY_VISOR) || '{}'));
 
 /** Datos crudos por fuente y datos derivados. */
@@ -446,18 +461,4 @@ function pintarSeccion1(lista) {
 
 /* ---------- SECCION 2: recepcion tecnica de traslados externos ---------- */
 function recepcionFiltrada() {
-  const q = normalizarCabecera(val('buscar_s2'));
-  return FUENTES.recepcion.filter(r => {
-    const tipo = normalizarCabecera(obtenerValorPorNombreColumna(r, A.tipoRecepcion));
-    // La seccion monitorea traslados externos; si no hay tipo declarado se incluye.
-    if (tipo && tipo.indexOf('traslado') === -1) return false;
-    if (!dentroDeRango(obtenerValorPorNombreColumna(r, A.fRecepcion) || obtenerValorPorNombreColumna(r, A.marca))) return false;
-    if (q && !normalizarCabecera(JSON.stringify(r)).includes(q)) return false;
-    return true;
-  });
-}
-
-function pintarSeccion2() {
-  const filas = recepcionFiltrada();
-  const columnas = [
-    { titulo: 'Fecha Recepción Técnica', alias: A.fRecepci
+  const q = norm
