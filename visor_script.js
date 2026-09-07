@@ -11,7 +11,7 @@ const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
 let CONFIG = Object.assign({
   apiUrl: '',
-  modoLocal: true,
+  modoLocal: false,
   folders: {
     despachos:   '1u30YFhTsocLuUoFrVUnb6Fk9zwVsT_E_',
     logistica:   '1_e8ycbznm0jA4kOBwkJuXM4EVdcwXzYe',
@@ -101,6 +101,17 @@ function esc(t) {
   return String(t === undefined || t === null ? '' : t)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function toast(msg, type) {
+  var tw = document.getElementById('toastWrap');
+  if (!tw) return;
+  var d = document.createElement('div');
+  var bg = type==='success'?'alert-success':type==='danger'?'alert-danger':type==='warning'?'alert-warning':'alert-info';
+  d.className = 'alert ' + bg + ' shadow-sm py-2 px-3 small';
+  d.innerHTML = msg;
+  tw.appendChild(d);
+  setTimeout(function(){ if(d.parentNode) d.remove(); }, 5000);
 }
 
 function normalizarCabecera(texto) {
@@ -238,7 +249,17 @@ async function cargarDatos() {
   $('estadoApi').className = 'badge bg-light text-dark';
   $('estadoApi').textContent = 'Cargando...';
 
-  if (CONFIG.modoLocal || !CONFIG.apiUrl) {
+  if (!CONFIG.apiUrl) {
+    const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
+    FUENTES = {
+      despachos: local.despachos || [], logistica: local.logistica || [],
+      recepcion: local.recepcion || [], novedades: local.novedades || [],
+      inventario: local.inventario || [], facturacion: local.facturacion || []
+    };
+    $('estadoApi').className = 'badge bg-warning text-dark';
+    $('estadoApi').textContent = 'Sin URL de Web App';
+    toast('⚠ Configure la URL de la Web App en Ajustes para leer datos de Drive.', 'warning');
+  } else if (CONFIG.modoLocal) {
     const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
     FUENTES = {
       despachos: local.despachos || [], logistica: local.logistica || [],
@@ -246,7 +267,7 @@ async function cargarDatos() {
       inventario: local.inventario || [], facturacion: local.facturacion || []
     };
     $('estadoApi').className = 'badge bg-secondary';
-    $('estadoApi').textContent = 'Datos locales';
+    $('estadoApi').textContent = 'Modo local';
   } else {
     try {
       const r = await api('consolidadoVisor', { folderIds: CONFIG.folders });
@@ -257,7 +278,15 @@ async function cargarDatos() {
       $('estadoApi').textContent = 'Conectado a Drive';
     } catch (e) {
       $('estadoApi').className = 'badge bg-danger';
-      $('estadoApi').textContent = 'Sin conexión';
+      $('estadoApi').textContent = 'Error de conexion';
+      toast('Error al conectar con Drive: ' + e.message + '. Usando datos locales.', 'danger');
+      // Fallback a datos locales
+      const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
+      FUENTES = {
+        despachos: local.despachos || [], logistica: local.logistica || [],
+        recepcion: local.recepcion || [], novedades: local.novedades || [],
+        inventario: local.inventario || [], facturacion: local.facturacion || []
+      };
       console.warn(e);
     }
   }
@@ -797,15 +826,28 @@ document.addEventListener('DOMContentLoaded', () => {
   // Hereda la configuracion del modulo de Cargue si existe.
   try {
     const cfgCargue = JSON.parse(localStorage.getItem('MF_CONFIG_CARGUE') || '{}');
-    if (cfgCargue.apiUrl && !CONFIG.apiUrl) CONFIG.apiUrl = cfgCargue.apiUrl;
+    if (cfgCargue.apiUrl && !CONFIG.apiUrl) { CONFIG.apiUrl = cfgCargue.apiUrl; }
     if (cfgCargue.folders) {
       Object.keys(cfgCargue.folders).forEach(k => {
         if (CONFIG.folders[k] !== undefined && !CONFIG.folders[k]) CONFIG.folders[k] = cfgCargue.folders[k];
       });
     }
+    // Si heredo la URL, guardarla en CONFIG del VISOR
+    if (cfgCargue.apiUrl) localStorage.setItem(LS_KEY_VISOR, JSON.stringify(CONFIG));
   } catch (e) {}
 
   pintarConfig();
+
+  // Alerta si no hay URL de Web App
+  if (!CONFIG.apiUrl) {
+    const alerta = document.createElement('div');
+    alerta.id = 'alertaNoApiVisor';
+    alerta.className = 'alert alert-warning alert-dismissible fade show position-fixed';
+    alerta.style.cssText = 'top:10px;left:50%;transform:translateX(-50%);z-index:99999;max-width:90vw;font-size:14px;';
+    alerta.innerHTML = '⚠ <strong>Sin conexion a Drive</strong> — Configure la URL de la Web App en <em>Ajustes</em> o carguela primero en el modulo CARGUE. <a href="#" onclick="document.getElementById(\'t6\')&&document.getElementById(\'t6\').click();this.closest(\'.alert\').remove();return false;">Ir a Ajustes</a> <button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+    document.body.appendChild(alerta);
+    setTimeout(() => { if (alerta.parentNode) alerta.remove(); }, 15000);
+  }
 
   $('v_guardar').addEventListener('click', () => {
     CONFIG.apiUrl = val('v_api_url');
