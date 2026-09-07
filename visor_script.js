@@ -172,11 +172,11 @@ const A = {
   correo:       ['Direccion de correo electronico', 'Correo'],
   origen:       ['Bodega Origen', 'BODEGA ORIGEN DEL TRASLADO', 'Bodega Origen Extrema', 'Bodega Origen Emisora'],
   traslado:     ['Documento TRASLADO', 'TRASLADO', 'Documento Traslado', 'Numero Traslado'],
-  alista:       ['QUIEN ALISTA', 'Responsable de Empacar / Rotular'],
+  alista:       ['QUIEN ALISTA', 'Responsable de Empacar / Rotular', 'Quien Alista'],
   destino:      ['DESTINO', 'BODEGA DESTINO DEL TRASLADO', 'Bodega Destino (CENDIS / B05)', 'Bodega Destino'],
   zona:         ['ZONA'],
   seguimiento:  ['SEGUIMIENTO'],
-  respCendis:   ['RESPONSABLE DE ENTREGA CENDIS', 'Responsable de Entrega'],
+  respCendis:   ['RESPONSABLE DE ENTREGA CENDIS', 'Responsable de Entrega', 'Responsable Entrega CENDIS'],
   tipo:         ['TIPO'],
   fEntregaLog:  ['FECHA ENTREGA LOGISTICA', 'Fecha y Hora de Registro Logistico'],
   recibeLog:    ['QUIEN RECIBE LOGISTICA'],
@@ -184,7 +184,7 @@ const A = {
   conductor:    ['CONDUCTOR', 'Responsable de Envio'],
   planilla:     ['PLANILLA'],
   fRecibidoPto: ['FECHA RECIBIDO EN PUNTO'],
-  quienRecibe:  ['QUIN RECIBE', 'QUIEN RECIBE', 'Quien Recibe en Punto'],
+  quienRecibe:  ['QUIN RECIBE', 'QUIEN RECIBE', 'Quien Recibe en Punto', 'Quien Recibio'],
   mes:          ['mes', 'MES'],
   urgente:      ['Urgente', 'URGENTE'],
   cantidad:     ['Cantidad', 'CANTIDAD'],
@@ -224,7 +224,9 @@ const A = {
   quienPito:   ['Quien Pito', 'Quien Pita', 'QUIEN PITO'],
   quienEmpaco: ['Quien Empaco', 'Quien Empaca', 'QUIEN EMPACO'],
   tipoCarga:    ['Tipo Carga', 'TIPO CARGA'],
-  concepto:     ['Concepto', 'CONCEPTO']
+  concepto:     ['Concepto', 'CONCEPTO'],
+  // Logistica - Revisado
+  revisado:     ['Revisado', 'REVISADO']
 };
 
 /** Convierte texto de fecha (varios formatos) a Date o null. */
@@ -1024,6 +1026,107 @@ async function accionCargarRotacionFecha() {
   }
 }
 
+/* ---------- SECCION 5: LOGISTICA Y DESPACHO ---------- */
+function logisticaFiltrada() {
+  const zona = val('f_zona_log'), revisado = val('f_revisado_log'), q = normalizarCabecera(val('buscar_s5'));
+  return FUENTES.logistica.filter(r => {
+    const marca = obtenerValorPorNombreColumna(r, A.marca);
+    if (!dentroDeRango(marca)) return false;
+    if (zona && normalizarCabecera(obtenerValorPorNombreColumna(r, A.zona)).indexOf(normalizarCabecera(zona)) === -1) return false;
+    if (revisado === 'SI' && normalizarCabecera(obtenerValorPorNombreColumna(r, A.revisado)) !== 'si') return false;
+    if (revisado === 'NO' && normalizarCabecera(obtenerValorPorNombreColumna(r, A.revisado)) === 'si') return false;
+    if (q && !normalizarCabecera(JSON.stringify(r)).includes(q)) return false;
+    return true;
+  });
+}
+
+function pintarSeccion5() {
+  const filas = logisticaFiltrada();
+  const columnas = [
+    { titulo: 'Documento TRASLADO', alias: A.traslado },
+    { titulo: 'Bodega Origen', alias: A.origen },
+    { titulo: 'Destino', alias: A.destino },
+    { titulo: 'Zona', alias: A.zona },
+    { titulo: 'Cantidad', alias: A.cantidad },
+    { titulo: 'Urgente', alias: A.urgente },
+    { titulo: 'Responsable Entrega CENDIS', alias: A.respCendis },
+    { titulo: 'Quien Alista', alias: A.alista },
+    { titulo: 'Marca Temporal / Fecha Inicial', alias: A.marca },
+    { titulo: 'Revisado', fn: r => badgeRevisado(r), html: true },
+    { titulo: 'Accion', fn: r => btnMarcarRevisado(r), html: true },
+    { titulo: 'Quien Recibio', fn: r => obtenerValorPorNombreColumna(r, A.quienRecibe) || '' },
+    { titulo: 'Observaciones', alias: A.observaciones }
+  ];
+  pintarTabla('head_s5', 'body_s5', columnas, filas, r => {
+    const rev = normalizarCabecera(obtenerValorPorNombreColumna(r, A.revisado));
+    const urg = normalizarCabecera(obtenerValorPorNombreColumna(r, A.urgente));
+    return (rev !== 'si' && urg === 'si') ? 'fila-urgente-pendiente' : (rev === 'si' ? 'fila-cumplido' : '');
+  });
+  const revisados = filas.filter(r => normalizarCabecera(obtenerValorPorNombreColumna(r, A.revisado)) === 'si').length;
+  $('info_s5').textContent = `${filas.length} registros · ${revisados} revisados · ${filas.length - revisados} sin revisar`;
+}
+
+function badgeRevisado(r) {
+  const v = normalizarCabecera(obtenerValorPorNombreColumna(r, A.revisado));
+  if (v === 'si') return '<span class="badge-est mf-revisado-si">&#9989; SI</span>';
+  return '<span class="badge-est mf-revisado-no">&#10060; NO</span>';
+}
+
+function btnMarcarRevisado(r) {
+  const v = normalizarCabecera(obtenerValorPorNombreColumna(r, A.revisado));
+  if (v === 'si') return '<span class="text-muted small">&mdash;</span>';
+  const traslado = obtenerValorPorNombreColumna(r, A.traslado) || '';
+  if (!traslado) return '';
+  const safeId = String(traslado).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  return `<button class="btn btn-sm btn-mf-revisado" onclick="marcarRevisadoLogistica('${safeId}')">&#9989; Marcar Revisado</button>`;
+}
+
+function marcarRevisadoLogistica(traslado) {
+  if (!traslado) return;
+  const folderId = CONFIG.folders.logistica;
+  apiPost({ action: 'actualizarRegistro', folderId: folderId, modulo: 'logistica',
+    claveCol: ['traslado', 'documento traslado'], claveVal: traslado,
+    cambios: { 'Revisado': 'SI' }
+  })
+  .then(r => {
+    if (r && r.ok) {
+      toast('&#9989; Traslado <strong>' + traslado + '</strong> marcado como Revisado.', 'success');
+      refrescarTodo();
+    } else {
+      toast('Error al marcar Revisado: ' + (r.error || ''), 'danger');
+    }
+  })
+  .catch(err => toast('Error de conexion: ' + err.message, 'danger'));
+}
+
+function exportarLogistica() {
+  const filas = logisticaFiltrada();
+  const wb = XLSX.utils.book_new();
+  const cabeceras = ['Documento TRASLADO','Bodega Origen','Destino','Zona','Cantidad','Urgente',
+    'Responsable Entrega CENDIS','Quien Alista','Marca Temporal','Revisado','Quien Recibio','Observaciones'];
+  const matriz = [cabeceras];
+  filas.forEach(r => {
+    matriz.push(cabeceras.map(c => {
+      if (c === 'Documento TRASLADO') return obtenerValorPorNombreColumna(r, A.traslado) || '';
+      if (c === 'Bodega Origen') return obtenerValorPorNombreColumna(r, A.origen) || '';
+      if (c === 'Destino') return obtenerValorPorNombreColumna(r, A.destino) || '';
+      if (c === 'Zona') return obtenerValorPorNombreColumna(r, A.zona) || '';
+      if (c === 'Cantidad') return obtenerValorPorNombreColumna(r, A.cantidad) || '';
+      if (c === 'Urgente') return obtenerValorPorNombreColumna(r, A.urgente) || '';
+      if (c === 'Responsable Entrega CENDIS') return obtenerValorPorNombreColumna(r, A.respCendis) || '';
+      if (c === 'Quien Alista') return obtenerValorPorNombreColumna(r, A.alista) || '';
+      if (c === 'Marca Temporal') return obtenerValorPorNombreColumna(r, A.marca) || '';
+      if (c === 'Revisado') return obtenerValorPorNombreColumna(r, A.revisado) || 'NO';
+      if (c === 'Quien Recibio') return obtenerValorPorNombreColumna(r, A.quienRecibe) || '';
+      if (c === 'Observaciones') return obtenerValorPorNombreColumna(r, A.observaciones) || '';
+      return '';
+    }));
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matriz), 'LOGISTICA');
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  XLSX.writeFile(wb, `Logistica_Despacho_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.xlsx`);
+}
+
 /* ---------------------------------------------------------------------------
  * 8. REFRESCO GENERAL Y EXPORTACION
  * ------------------------------------------------------------------------- */
@@ -1034,6 +1137,7 @@ function refrescarTodo() {
   pintarSeccion2();
   pintarSeccion3();
   pintarSeccion4();
+  pintarSeccion5();
   pintarAperturaDia();
 }
 
@@ -1248,6 +1352,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnPlanillaDespachos').addEventListener('click', descargarPlanillaDespachos);
   $('btnPlanillaImprimir').addEventListener('click', imprimirPlanillaDespachos);
   $('btnAplicar').addEventListener('click', refrescarTodo);
+  if ($('btnExportarLogistica')) $('btnExportarLogistica').addEventListener('click', exportarLogistica);
 
   // Botones de Apertura del Dia
   if ($('btnGenerarRotacion')) $('btnGenerarRotacion').addEventListener('click', accionGenerarRotacion);
@@ -1261,15 +1366,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('btnLimpiarFiltros').addEventListener('click', () => {
     ['f_desde', 'f_hasta', 'f_origen', 'f_destino', 'f_zona', 'f_estado', 'f_urgente',
-     'f_bodega_inv', 'f_solo_dif', 'buscar_s1', 'buscar_s2', 'buscar_s3', 'buscar_s4', 'buscar_traslado_5']
+     'f_bodega_inv', 'f_solo_dif', 'f_zona_log', 'f_revisado_log',
+     'buscar_s1', 'buscar_s2', 'buscar_s3', 'buscar_s4', 'buscar_s5', 'buscar_traslado_5']
       .forEach(id => { if ($(id)) $(id).value = ''; });
     refrescarTodo();
   });
 
-  ['buscar_s1', 'buscar_s2', 'buscar_s3', 'buscar_s4', 'buscar_traslado_5', 'f_bodega_inv', 'f_solo_dif']
-    .forEach(id => $(id).addEventListener('input', refrescarTodo));
-  ['f_desde', 'f_hasta', 'f_origen', 'f_destino', 'f_zona', 'f_estado', 'f_urgente']
-    .forEach(id => $(id).addEventListener('change', refrescarTodo));
+  ['buscar_s1', 'buscar_s2', 'buscar_s3', 'buscar_s4', 'buscar_s5', 'buscar_traslado_5', 'f_bodega_inv', 'f_solo_dif']
+    .forEach(id => { if ($(id)) $(id).addEventListener('input', refrescarTodo); });
+  ['f_desde', 'f_hasta', 'f_origen', 'f_destino', 'f_zona', 'f_estado', 'f_urgente', 'f_zona_log', 'f_revisado_log']
+    .forEach(id => { if ($(id)) $(id).addEventListener('change', refrescarTodo); });
 
   cargarDatos();
 
