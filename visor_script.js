@@ -56,7 +56,7 @@ function verificarLoginVisor() {
     errDiv.style.display = 'block';
     errDiv.textContent = 'Seleccione un perfil.'; return;
   }
-  if (CREDENCIALES_VISOR[usuario] && CREDENCIALES_VISOR[usuario] === clave) {
+  if (CREDENCIALES_VISOR[usuario] && CREDENCIALES_VISOR[usuario].toLowerCase() === clave.toLowerCase()) {
     localStorage.setItem(LS_LOGIN_VISOR, usuario);
     $('pantallaLoginVisor').style.display = 'none';
     errDiv.style.display = 'none';
@@ -480,4 +480,354 @@ function pintarTabla(headId, bodyId, columnas, filas, claseFila) {
 }
 
 function badgeEstado(estado) {
-  const m = { 'CUMPLIDO': 'est-cumplido', 'EN T
+  const m = { 'CUMPLIDO': 'est-cumplido', 'EN TRANSITO': 'est-transito', 'PENDIENTE': 'est-pendiente', 'NOVEDAD': 'est-novedad' };
+  return `<span class="badge-est ${m[estado] || 'est-pendiente'}">${esc(estado)}</span>`;
+}
+
+/* ---------- SECCION 1: consolidado de traslados ---------- */
+function pintarSeccion1(lista) {
+  const columnas = [
+    { titulo: 'Marca temporal', alias: A.marca },
+    { titulo: 'Correo electrónico', alias: A.correo },
+    { titulo: 'Bodega Origen', alias: A.origen },
+    { titulo: 'Documento TRASLADO', alias: A.traslado },
+    { titulo: 'QUIEN ALISTA', alias: A.alista },
+    { titulo: 'DESTINO', alias: A.destino },
+    { titulo: 'ZONA', alias: A.zona },
+    { titulo: 'Urgente', fn: t => t.urgente, html: false },
+    { titulo: 'SEGUIMIENTO', fn: t => badgeEstado(t.estado), html: true },
+    { titulo: 'RESPONSABLE ENTREGA CENDIS', alias: A.respCendis },
+    { titulo: 'TIPO', alias: A.tipo },
+    { titulo: 'FECHA ENTREGA LOGISTICA', alias: A.fEntregaLog },
+    { titulo: 'QUIEN RECIBE LOGISTICA', alias: A.recibeLog },
+    { titulo: 'FECHA PLANILLA ENVIO LOGISTICA', alias: A.fPlanilla },
+    { titulo: 'CONDUCTOR', alias: A.conductor },
+    { titulo: 'PLANILLA', alias: A.planilla },
+    { titulo: 'FECHA RECIBIDO EN PUNTO', alias: A.fRecibidoPto },
+    { titulo: 'QUIN RECIBE', alias: A.quienRecibe },
+    { titulo: 'mes', alias: A.mes },
+    { titulo: 'T. Alistamiento', fn: t => formatoDuracion(t.tAlistamiento) },
+    { titulo: 'T. Espera Despacho', fn: t => formatoDuracion(t.tEsperaDespacho) },
+    { titulo: 'T. Tránsito', fn: t => formatoDuracion(t.tTransito) },
+    { titulo: 'Novedad', fn: t => (t.tieneNovedad ? 'SI' : 'NO') }
+  ];
+  pintarTabla('head_s1', 'body_s1', columnas, lista, t =>
+    urgenteEnRiesgo(t) ? 'fila-urgente-pendiente' : (t.estado === 'CUMPLIDO' ? 'fila-cumplido' : ''));
+  $('info_s1').textContent = `${lista.length} traslados · ${lista.filter(urgenteEnRiesgo).length} urgentes en riesgo`;
+}
+
+/* ---------- SECCION 2: recepcion tecnica de traslados externos ---------- */
+function recepcionFiltrada() {
+  const q = normalizarCabecera(val('buscar_s2'));
+  return FUENTES.recepcion.filter(r => {
+    const tipo = normalizarCabecera(obtenerValorPorNombreColumna(r, A.tipoRecepcion));
+    // La seccion monitorea traslados externos; si no hay tipo declarado se incluye.
+    if (tipo && tipo.indexOf('traslado') === -1) return false;
+    if (!dentroDeRango(obtenerValorPorNombreColumna(r, A.fRecepcion) || obtenerValorPorNombreColumna(r, A.marca))) return false;
+    if (q && !normalizarCabecera(JSON.stringify(r)).includes(q)) return false;
+    return true;
+  });
+}
+
+function pintarSeccion2() {
+  const filas = recepcionFiltrada();
+  const columnas = [
+    { titulo: 'Fecha Recepción Técnica', alias: A.fRecepcion },
+    { titulo: 'Documento Traslado', alias: A.traslado },
+    { titulo: 'Bodega Origen Externa', alias: A.origen },
+    { titulo: 'Bodega Destino (CENDIS / B05)', alias: A.destino },
+    { titulo: 'Código Producto / Molécula', alias: A.codigo },
+    { titulo: 'Descripción', alias: A.descripcion },
+    { titulo: 'Lote', alias: A.lote },
+    { titulo: 'Fecha Vencimiento', alias: A.vencimiento },
+    { titulo: 'Cantidad Enviada', alias: A.cantEnviada },
+    { titulo: 'Cantidad Recibida', alias: A.cantRecibida },
+    { titulo: 'Diferencia', fn: r => Number(obtenerValorPorNombreColumna(r, A.cantRecibida) || 0) - Number(obtenerValorPorNombreColumna(r, A.cantEnviada) || 0) },
+    { titulo: 'Estado Recepción Técnica', alias: A.estadoRec },
+    { titulo: 'Responsable de Recepción', alias: A.respRec },
+    { titulo: 'Observaciones', alias: A.observaciones }
+  ];
+  pintarTabla('head_s2', 'body_s2', columnas, filas, r => {
+    const dif = Number(obtenerValorPorNombreColumna(r, A.cantRecibida) || 0) - Number(obtenerValorPorNombreColumna(r, A.cantEnviada) || 0);
+    const estado = normalizarCabecera(obtenerValorPorNombreColumna(r, A.estadoRec));
+    return (dif !== 0 || estado === 'novedad') ? 'fila-diferencia' : '';
+  });
+  $('info_s2').textContent = `${filas.length} ítems recibidos`;
+}
+
+/* ---------- SECCION 3: novedades, modificaciones y anulaciones ---------- */
+function pintarSeccion3() {
+  const q = normalizarCabecera(val('buscar_s3'));
+  const filas = FUENTES.novedades.filter(n =>
+    dentroDeRango(obtenerValorPorNombreColumna(n, A.marca)) &&
+    (!q || normalizarCabecera(JSON.stringify(n)).includes(q)));
+  const columnas = [
+    { titulo: 'Marca temporal', alias: A.marca },
+    { titulo: 'Correo electrónico', alias: A.correo },
+    { titulo: 'Bodega Origen del Traslado', alias: A.origen },
+    { titulo: 'Bodega Destino del Traslado', alias: A.destino },
+    { titulo: 'TRASLADO', alias: A.traslado },
+    { titulo: 'Causa de anulación / modificación', alias: A.causa },
+    { titulo: 'Solicita la corrección', alias: A.solicita },
+    { titulo: 'Teléfono de contacto', alias: A.telefono },
+    { titulo: 'SEGUIMIENTO', alias: A.seguimiento },
+    { titulo: 'SOLUCIONADO', alias: A.solucionado },
+    { titulo: 'Efecto en seguimiento', fn: () => 'CUMPLIDO (conserva fecha inicial)' }
+  ];
+  pintarTabla('head_s3', 'body_s3', columnas, filas, n =>
+    normalizarCabecera(obtenerValorPorNombreColumna(n, A.solucionado)) === 'si' ? 'fila-cumplido' : 'fila-diferencia');
+  $('info_s3').textContent = `${filas.length} novedades registradas`;
+}
+
+/* ---------- SECCION 4: control y verificacion de inventario ---------- */
+function inventarioFiltrado() {
+  const bod = val('f_bodega_inv'), soloDif = val('f_solo_dif'), q = normalizarCabecera(val('buscar_s4'));
+  return FUENTES.inventario.filter(i => {
+    const fecha = obtenerValorPorNombreColumna(i, ['Fecha Verificacion']) || obtenerValorPorNombreColumna(i, A.marca);
+    if (!dentroDeRango(fecha)) return false;
+    if (bod && normalizarCabecera(obtenerValorPorNombreColumna(i, A.bodegaInv)).indexOf(normalizarCabecera(bod)) === -1) return false;
+    if (soloDif && Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) === 0) return false;
+    if (q && !normalizarCabecera(JSON.stringify(i)).includes(q)) return false;
+    return true;
+  });
+}
+
+function pintarSeccion4() {
+  const filas = inventarioFiltrado();
+  const columnas = [
+    { titulo: 'Fecha Verificación', fn: i => obtenerValorPorNombreColumna(i, ['Fecha Verificacion']) || obtenerValorPorNombreColumna(i, A.marca) },
+    { titulo: 'Bodega (CENDIS / B05)', alias: A.bodegaInv },
+    { titulo: 'Responsable Asignado', alias: A.respInv },
+    { titulo: 'Molécula / Medicamento', alias: A.molecula },
+    { titulo: 'Código Producto', alias: ['Codigo Producto', 'Codigo Producto / Molecula'] },
+    { titulo: 'Lote', alias: A.lote },
+    { titulo: 'Fecha Vencimiento', alias: A.vencimiento },
+    { titulo: 'Cantidad Teórica', alias: A.teorica },
+    { titulo: 'Cantidad Física', alias: A.fisica },
+    { titulo: 'Diferencia', alias: A.diferencia },
+    { titulo: 'Estado / Novedad', alias: A.estadoInv },
+    { titulo: 'Observaciones', alias: A.observaciones }
+  ];
+  pintarTabla('head_s4', 'body_s4', columnas, filas, i =>
+    Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) !== 0 ? 'fila-diferencia' : '');
+  const conDif = filas.filter(i => Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) !== 0).length;
+  $('info_s4').textContent = `${filas.length} ítems verificados · ${conDif} con diferencia`;
+}
+
+/* ---------------------------------------------------------------------------
+ * 7. REFRESCO GENERAL Y EXPORTACION
+ * ------------------------------------------------------------------------- */
+function refrescarTodo() {
+  const lista = trasladosFiltrados();
+  pintarKpis(lista);
+  pintarSeccion1(lista);
+  pintarSeccion2();
+  pintarSeccion3();
+  pintarSeccion4();
+}
+
+/** Exporta el consolidado visible a XLSX (una hoja por sección). */
+function exportarConsolidado() {
+  const wb = XLSX.utils.book_new();
+  const hoja = (nombre, filas) => {
+    const cabeceras = [];
+    filas.forEach(f => Object.keys(f).forEach(k => { if (k.indexOf('__') !== 0 && !cabeceras.includes(k)) cabeceras.push(k); }));
+    const matriz = [cabeceras.length ? cabeceras : ['Sin registros']];
+    filas.forEach(f => matriz.push(cabeceras.map(c => (f[c] !== undefined ? f[c] : ''))));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matriz), nombre);
+  };
+  const lista = trasladosFiltrados();
+  hoja('TRASLADOS', lista.map(t => Object.assign({}, t.crudo, {
+    'Estado Calculado': t.estado,
+    'Tiempo Alistamiento (h)': t.tAlistamiento === null ? '' : Math.round(t.tAlistamiento * 100) / 100,
+    'Tiempo Espera Despacho (h)': t.tEsperaDespacho === null ? '' : Math.round(t.tEsperaDespacho * 100) / 100,
+    'Tiempo Transito (h)': t.tTransito === null ? '' : Math.round(t.tTransito * 100) / 100,
+    'Tiene Novedad': t.tieneNovedad ? 'SI' : 'NO'
+  })));
+  hoja('RECEPCION TECNICA', recepcionFiltrada());
+  hoja('NOVEDADES', FUENTES.novedades);
+  hoja('INVENTARIO', inventarioFiltrado());
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  XLSX.writeFile(wb, `Consolidado_Visor_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.xlsx`);
+}
+
+/* ---------------------------------------------------------------------------
+ * 7.b PLANILLA DE DESPACHOS (descarga XLSX / impresión)
+ *     Columnas fijas solicitadas por operación CENDIS - LOGISTICA.
+ * ------------------------------------------------------------------------- */
+const COLS_PLANILLA = ['Fecha', 'Bodega Origen', 'Bodega Destino', 'Traslado', 'Cantidad',
+  'Tipo', 'Ruta', 'Fecha de Envío de Traslado', 'Responsable de Envío', 'Placa',
+  'Observación', 'Estado'];
+
+/** Normaliza el tipo de empaque a las categorías oficiales. */
+function clasificarTipo(valor) {
+  const v = normalizarCabecera(valor);
+  if (!v) return '';
+  if (v.includes('caja')) return 'CAJA';
+  if (v.includes('panal')) return 'PAÑALES';
+  if (v.includes('nevera') || v.includes('cadena de frio') || v.includes('refriger')) return 'NEVERA';
+  if (v.includes('paquete')) return 'PAQUETE';
+  return String(valor).toUpperCase();
+}
+
+/** Solo la fecha (sin hora) de un texto de fecha. */
+function soloFecha(texto) {
+  const d = aFecha(texto);
+  if (!d) return String(texto || '');
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+/** Arma las filas de la planilla a partir de los traslados filtrados. */
+function filasPlanillaDespachos() {
+  return trasladosFiltrados().map(t => ({
+    'Fecha': soloFecha(t.fechaInicial),
+    'Bodega Origen': t.origen,
+    'Bodega Destino': t.destino,
+    'Traslado': t.traslado,
+    'Cantidad': obtenerValorPorNombreColumna(t.crudo, A.cantidad),
+    'Tipo': clasificarTipo(obtenerValorPorNombreColumna(t.crudo, A.tipo)),
+    'Ruta': t.zona,
+    'Fecha de Envío de Traslado': t.fPlanilla || '',
+    'Responsable de Envío': obtenerValorPorNombreColumna(t.crudo, A.conductor),
+    'Placa': obtenerValorPorNombreColumna(t.crudo, ['PLACA', 'Placa']),
+    'Observación': obtenerValorPorNombreColumna(t.crudo, A.observaciones),
+    'Estado': t.estado + (esSi(t.urgente) ? ' / URGENTE' : '')
+  }));
+}
+
+/** Descarga la planilla de despachos en XLSX. */
+function descargarPlanillaDespachos() {
+  const filas = filasPlanillaDespachos();
+  if (!filas.length) { alert('No hay traslados en el filtro actual para generar la planilla.'); return; }
+
+  const matriz = [
+    ['OPERACIÓN CENDIS - LOGÍSTICA — PLANILLA DE DESPACHOS'],
+    ['Generado: ' + new Date().toLocaleString('es-CO'), '', 'Registros: ' + filas.length],
+    [],
+    COLS_PLANILLA
+  ];
+  filas.forEach(f => matriz.push(COLS_PLANILLA.map(c => f[c])));
+
+  const ws = XLSX.utils.aoa_to_sheet(matriz);
+  ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
+                 { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 10 }, { wch: 34 }, { wch: 18 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'PLANILLA DESPACHOS');
+
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  XLSX.writeFile(wb, `Planilla_Despachos_CENDIS_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.xlsx`);
+}
+
+/** Genera la vista de impresión de la planilla de despachos. */
+function imprimirPlanillaDespachos() {
+  const filas = filasPlanillaDespachos();
+  if (!filas.length) { alert('No hay traslados en el filtro actual para imprimir.'); return; }
+
+  const encabezado = `
+    <div style="text-align:center;margin-bottom:10px">
+      <img src="assets/logo.jpeg" style="height:52px" alt="Medisfarma">
+      <h3 style="margin:6px 0 0">OPERACIÓN CENDIS - LOGÍSTICA</h3>
+      <div style="font-size:12px">Planilla de Despachos &middot; ${new Date().toLocaleString('es-CO')} &middot; ${filas.length} traslados</div>
+    </div>`;
+
+  const thead = '<thead><tr>' + COLS_PLANILLA.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead>';
+  const tbody = '<tbody>' + filas.map(f =>
+    '<tr>' + COLS_PLANILLA.map(c => `<td>${esc(f[c])}</td>`).join('') + '</tr>').join('') + '</tbody>';
+
+  $('areaPlanillaImpresion').innerHTML = encabezado + '<table>' + thead + tbody + '</table>' +
+    '<p style="margin-top:18px;font-size:11px">Entrega CENDIS: ____________________ &nbsp;&nbsp; Recibe Logística: ____________________ &nbsp;&nbsp; Conductor: ____________________</p>';
+
+  window.print();
+}
+
+/* ---------------------------------------------------------------------------
+ * 8. INICIALIZACION
+ * ------------------------------------------------------------------------- */
+function pintarConfig() {
+  $('v_api_url').value = CONFIG.apiUrl || '';
+  ['despachos', 'logistica', 'recepcion', 'novedades', 'inventario', 'facturacion']
+    .forEach(m => { $('v_folder_' + m).value = CONFIG.folders[m] || ''; });
+  $('v_modo_local').checked = !!CONFIG.modoLocal;
+  pintarPerfilesVisor();
+}
+
+/** Muestra los perfiles de archivos configurados en el modal del Visor. */
+function pintarPerfilesVisor() {
+  const perfiles = CONFIG.perfiles || {};
+  const LABELS = {
+    despachos: 'Despachos (BD_PLANILLA_ENTREGA_DESPACHOS)',
+    logistica: 'Logística (BD_LOGISTICA_DESPACHOS)',
+    recepcion: 'Recepción Técnica (BD_RECEPCION_TECNICA)',
+    facturacion: 'Factura Transporte (BD_FACTURA_TRANSPORTE)',
+    inventario: 'Inventario (BD_VERIFICACION_INVENTARIO)'
+  };
+  const cont = $('perfilesInfoVisor');
+  if (!cont) return;
+  cont.innerHTML = Object.keys(LABELS).map(k => {
+    const p = perfiles[k] || {};
+    return '<div class="row g-1 mb-1">' +
+      '<div class="col-md-5"><strong>' + esc(LABELS[k]) + '</strong></div>' +
+      '<div class="col-md-4"><span class="text-muted">Archivo:</span> ' + esc(p.file || '(sin asignar)') + '</div>' +
+      '<div class="col-md-3"><span class="text-muted">Hoja:</span> ' + esc(p.sheet || '(sin asignar)') + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // ----- SISTEMA DE LOGIN -----
+  const loginPrevio = localStorage.getItem(LS_LOGIN_VISOR);
+  if (loginPrevio && CREDENCIALES_VISOR[loginPrevio]) {
+    $('pantallaLoginVisor').style.display = 'none';
+  } else {
+    $('pantallaLoginVisor').style.display = 'flex';
+  }
+
+  $('btnLoginVisor').addEventListener('click', verificarLoginVisor);
+  $('loginContrasenaVisor').addEventListener('keydown', e => { if (e.key === 'Enter') verificarLoginVisor(); });
+  $('btnCerrarSesionVisor').addEventListener('click', cerrarSesionVisor);
+
+  // Hereda la configuracion del modulo de Cargue si existe.
+  try {
+    const cfgCargue = JSON.parse(localStorage.getItem('MF_CONFIG_CARGUE') || '{}');
+    if (cfgCargue.apiUrl && !CONFIG.apiUrl) CONFIG.apiUrl = cfgCargue.apiUrl;
+    if (cfgCargue.folders) {
+      Object.keys(cfgCargue.folders).forEach(k => {
+        if (CONFIG.folders[k] !== undefined && !CONFIG.folders[k]) CONFIG.folders[k] = cfgCargue.folders[k];
+      });
+    }
+  } catch (e) {}
+
+  pintarConfig();
+
+  $('v_guardar').addEventListener('click', () => {
+    CONFIG.apiUrl = val('v_api_url');
+    ['despachos', 'logistica', 'recepcion', 'novedades', 'inventario', 'facturacion']
+      .forEach(m => { CONFIG.folders[m] = val('v_folder_' + m); });
+    CONFIG.modoLocal = $('v_modo_local').checked;
+    localStorage.setItem(LS_KEY_VISOR, JSON.stringify(CONFIG));
+    cargarDatos();
+  });
+
+  $('btnRefrescar').addEventListener('click', cargarDatos);
+  $('btnExportar').addEventListener('click', exportarConsolidado);
+  $('btnPlanillaDespachos').addEventListener('click', descargarPlanillaDespachos);
+  $('btnPlanillaImprimir').addEventListener('click', imprimirPlanillaDespachos);
+  $('btnAplicar').addEventListener('click', refrescarTodo);
+  $('btnLimpiarFiltros').addEventListener('click', () => {
+    ['f_desde', 'f_hasta', 'f_origen', 'f_destino', 'f_zona', 'f_estado', 'f_urgente',
+     'f_bodega_inv', 'f_solo_dif', 'buscar_s1', 'buscar_s2', 'buscar_s3', 'buscar_s4', 'buscar_traslado_5']
+      .forEach(id => { if ($(id)) $(id).value = ''; });
+    refrescarTodo();
+  });
+
+  ['buscar_s1', 'buscar_s2', 'buscar_s3', 'buscar_s4', 'buscar_traslado_5', 'f_bodega_inv', 'f_solo_dif']
+    .forEach(id => $(id).addEventListener('input', refrescarTodo));
+  ['f_desde', 'f_hasta', 'f_origen', 'f_destino', 'f_zona', 'f_estado', 'f_urgente']
+    .forEach(id => $(id).addEventListener('change', refrescarTodo));
+
+  cargarDatos();
+
+  // Actualizacion automatica cada 5 minutos cuando hay conexion a Drive.
+  setInterval(() => { if (!CONFIG.modoLocal && CONFIG.apiUrl) cargarDatos(); }, 300000);
+});
