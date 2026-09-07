@@ -23,7 +23,7 @@ const VISOR_DEFAULTS = {
     inventario:  '11Iml2ggmvAK8aHeUbDGeWbyhLxCtrPoY',
     facturacion: '1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-',
     seguridad:   '1I8XfW5vjt5qFkhnd5m6anaUA9ETVHf_N',
-    rotacion:    '1I8XfW5vjt5qFkhnd5m6anaUA9ETVHf_N',
+    rotacion:    '106BTSHLA8giLcW8qkvbJWiqA_7KiDpBi',
     backup:      '1HVTZyLasrbZArTN34kmc0lCKaQa2qQ_5'
   },
   perfiles: {
@@ -761,164 +761,173 @@ function pintarSeccion4() {
 }
 
 /* ---------------------------------------------------------------------------
- * 7. APERTURA DEL DIA — ROTACION DIARIA DE PERSONAL
- *    32 auxiliares, 3 roles (Alistar, Pitar, Empacar), restriccion de 3 dias.
+ * 7. APERTURA DEL DIA — ROTACION POR GRUPOS FIJOS (TRIADAS)
+ *    7 trios con rotacion ciclica interna + Grupo Especial Gris (TB5)
  * ------------------------------------------------------------------------- */
 
-const AUXILIARES_ROTACION = [
-  'Yuri', 'Julio', 'Hernan', 'Diego', 'Brian', 'Karina', 'Jhony', 'Natalia',
-  'Manuel', 'Claudia', 'Daniela', 'Juan', 'LuzL', 'Liz', 'Ana', 'Leidy',
-  'Bivian', 'Vaneza', 'Brayan', 'Nicoll', 'Luis', 'Estefania', 'Angela', 'Camila',
-  'Angie', 'Mayra', 'Derly', 'Luisa', 'LuzN', 'Andrea', 'Andres', 'DiegoE'
-];
+const GRUPOS_ROTACION = {
+  'Verde Menta': { color: '#98FB98', hex: '#3eb489', miembros: ['Manuel David Salazar', 'Luz Nelly Chaves', 'Luis Felipe Marin'] },
+  'Naranja':      { color: '#FFDAB9', hex: '#FF8C00', miembros: ['Daniela Noreña', 'Juan David Moreno', 'Kelly Beltran'] },
+  'Verde':        { color: '#C8F7C5', hex: '#2fb457', miembros: ['Leidy Valencia', 'Bivian Lorena Rivera', 'Brayan Camilo Izquierdo'] },
+  'Rojo':         { color: '#FFB3B3', hex: '#dc3545', miembros: ['Nicoll Triviño', 'Estefania Parra', 'Luisa María Osorio'] },
+  'Morado':       { color: '#D8BFD8', hex: '#6f42c1', miembros: ['Jhony Saenz', 'Natalia Galvez', 'Valentina Cano'] },
+  'Amarillo':     { color: '#FFFACD', hex: '#ffc107', miembros: ['Liz Karime Valencia', 'Angela Vanessa Aguirre', 'Derly Yulieth Mosquera'] },
+  'Azul':         { color: '#B0E0E6', hex: '#0d6efd', miembros: ['Karina Riascos', 'Ana Lorena Ortiz', 'Vaneza Escobar'] }
+};
+
+const GRUPO_ESPECIAL_TB5 = {
+  nombre: 'Gris',
+  color: '#D3D3D3',
+  hex: '#6c757d',
+  miembros: ['Claudia Echeverry', 'Camila Posada', 'Angela Vera', 'Mayra Alejandra Franco', 'Andrea Vanegas'],
+  esTB5: true
+};
 
 const ROLES_ROTACION = ['Alistar', 'Pitar', 'Empacar'];
 
 /**
- * Genera la rotacion del dia respetando la restriccion de 3 dias:
- * - Cada persona hace exactamente UN rol por dia.
- * - Ninguna persona repite el MISMO rol dentro de 3 dias consecutivos.
- * - La distribucion intenta equilibrar la carga (10-11-11 o similar).
+ * Genera la rotacion del dia basada en trios con rotacion ciclica.
+ * - Cada trio rola internamente: Dia 1: Alista/Pita/Empaca, Dia 2 rotan, Dia 3 rol restante.
+ * - Dia 4 (n+3) reinicia el ciclo.
+ * - El Grupo Especial Gris (TB5) tiene asignacion fija (los 3 roles para TB5*).
  *
  * @param {string} fecha - Fecha ISO (yyyy-mm-dd)
- * @param {Array} historial - Array de { fecha, asignaciones: [{ nombre, rol }] } de los ultimos 3 dias
- * @returns {Array} asignaciones: [{ nombre, rol }]
+ * @param {Array} historial - No usado en logica de trios, conservado para compatibilidad
+ * @returns {Array} asignaciones: [{ nombre, rol, grupo }]
  */
 function generarRotacion(fecha, historial) {
-  const personas = AUXILIARES_ROTACION.slice();
-  const total = personas.length; // 32
-  const roles = ROLES_ROTACION;
-  const numRoles = roles.length; // 3
-
-  /* Construir mapa de roles recientes por persona:
-     rolesRecientes[nombre] = Set de roles que ha hecho en los ultimos 3 dias */
-  const rolesRecientes = {};
-  personas.forEach(p => { rolesRecientes[p] = new Set(); });
-
-  if (historial && historial.length) {
-    historial.forEach(dia => {
-      if (dia.asignaciones) {
-        dia.asignaciones.forEach(a => {
-          if (rolesRecientes[a.nombre]) {
-            rolesRecientes[a.nombre].add(a.rol);
-          }
-        });
-      }
-    });
-  }
-
-  /* Barajar personas aleatoriamente para distribucion equitativa */
-  const shuffled = personas.slice();
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-
-  /* Tamanos objetivo: 32/3 = 10.67 → 11, 11, 10 */
-  const tamanos = [Math.ceil(total / numRoles), Math.ceil(total / numRoles), total - 2 * Math.ceil(total / numRoles)];
-  // Ajustar si el tercero queda negativo
-  if (tamanos[2] < 10) { tamanos[1] = 11; tamanos[2] = 10; }
-
-  const asignados = { Alistar: [], Pitar: [], Empacar: [] };
-  const pendientes = [];
-
-  /* Primera pasada: asignar rol preferido (que no haya hecho en 3 dias) */
-  shuffled.forEach(persona => {
-    const prohibidos = rolesRecientes[persona];
-    const disponibles = roles.filter(r => !prohibidos.has(r));
-
-    if (disponibles.length === 0) {
-      /* Si hizo los 3 roles en los ultimos 3 dias (caso extremo), permitir cualquiera */
-      pendientes.push(persona);
-      return;
-    }
-
-    /* Elegir el rol con menos asignados hasta el momento entre los disponibles */
-    let mejor = null;
-    let menor = Infinity;
-    disponibles.forEach(r => {
-      if (asignados[r].length < tamanos[roles.indexOf(r)] && asignados[r].length < menor) {
-        menor = asignados[r].length;
-        mejor = r;
-      }
-    });
-
-    if (mejor) {
-      asignados[mejor].push(persona);
-    } else {
-      pendientes.push(persona);
-    }
-  });
-
-  /* Segunda pasada: asignar pendientes donde quepan */
-  pendientes.forEach(persona => {
-    const prohibidos = rolesRecientes[persona];
-    let asignado = false;
-    /* Intentar rol no prohibido primero */
-    for (const r of roles) {
-      if (!prohibidos.has(r) && asignados[r].length < tamanos[roles.indexOf(r)] + 2) {
-        asignados[r].push(persona);
-        asignado = true;
-        break;
-      }
-    }
-    /* Si todos prohibidos o llenos, asignar al menos lleno */
-    if (!asignado) {
-      let menor = Infinity;
-      let mejorR = roles[0];
-      roles.forEach(r => {
-        if (asignados[r].length < menor) { menor = asignados[r].length; mejorR = r; }
-      });
-      asignados[mejorR].push(persona);
-    }
-  });
-
-  /* Convertir a array de asignaciones */
   const resultado = [];
-  roles.forEach(r => {
-    asignados[r].forEach(nombre => {
-      resultado.push({ nombre, rol: r });
+
+  // Calcular el dia del ciclo (1-3) basado en fecha
+  const d = new Date(fecha + 'T12:00:00');
+  // Contar dias desde una referencia (1 ene 2024 = lunes) — usamos Math.floor para ciclo de 3
+  const epochMs = d.getTime();
+  const epochDays = Math.floor(epochMs / 86400000);
+  const cicloDia = ((epochDays % 3) + 3) % 3; // 0, 1, 2
+  // Mapeo: cicloDia 0 = Dia 1 (base), cicloDia 1 = Dia 2 (rotan 1 posicion), cicloDia 2 = Dia 3 (rotan 2 posiciones)
+
+  const roles = ROLES_ROTACION; // ['Alistar', 'Pitar', 'Empacar']
+
+  // Generar asignaciones para cada trio estandar
+  Object.keys(GRUPOS_ROTACION).forEach(nombreGrupo => {
+    const grupo = GRUPOS_ROTACION[nombreGrupo];
+    const miembros = grupo.miembros; // 3 personas
+
+    miembros.forEach((persona, idxBase) => {
+      // Indice de rol para esta persona hoy
+      const idxRol = (idxBase + cicloDia) % 3;
+      resultado.push({
+        nombre: persona,
+        rol: roles[idxRol],
+        grupo: nombreGrupo
+      });
+    });
+  });
+
+  // Generar asignaciones para Grupo Especial TB5 (fijo, los 3 roles)
+  GRUPO_ESPECIAL_TB5.miembros.forEach(persona => {
+    roles.forEach(rol => {
+      resultado.push({
+        nombre: persona,
+        rol: rol,
+        grupo: 'Gris (TB5)'
+      });
     });
   });
 
   return resultado;
 }
 
-/** Pinta las 3 columnas de rotacion en el panel de Apertura del Dia */
+/** Pinta los trios de rotacion y el grupo especial TB5 en el panel de Apertura del Dia */
 function pintarAperturaDia() {
-  const contA = $('rot_lista_alistar');
-  const contP = $('rot_lista_pitar');
-  const contE = $('rot_lista_empacar');
-  if (!contA) return;
-
+  const contTrios = $('rot_trios_container');
+  const contGris = $('rot_miembros_gris');
+  const info = $('info_rotacion');
   const asignaciones = ROTACION_DIA || [];
-  const porRol = { Alistar: [], Pitar: [], Empacar: [] };
-  asignaciones.forEach(a => { if (porRol[a.rol]) porRol[a.rol].push(a.nombre); });
 
-  const pintarLista = (cont, nombres, color) => {
-    if (!cont) return;
-    cont.innerHTML = '';
-    if (!nombres.length) {
-      cont.innerHTML = '<div class="rot-item text-muted">Sin asignar</div>';
-      return;
+  // Pintar Grupo Especial Gris (TB5)
+  if (contGris) {
+    contGris.innerHTML = '';
+    const miembrosTB5 = asignaciones.filter(a => a.grupo === 'Gris (TB5)');
+    if (miembrosTB5.length) {
+      const personasUnicas = GRUPO_ESPECIAL_TB5.miembros;
+      personasUnicas.forEach(nombre => {
+        const badge = document.createElement('span');
+        badge.className = 'rot-miembro-badge rot-grupo-gris-badge';
+        badge.innerHTML = '<strong>' + esc(nombre) + '</strong> <span class="text-muted small">(Alista, Pita, Empaca)</span>';
+        contGris.appendChild(badge);
+      });
+    } else {
+      GRUPO_ESPECIAL_TB5.miembros.forEach(nombre => {
+        const badge = document.createElement('span');
+        badge.className = 'rot-miembro-badge rot-grupo-gris-badge';
+        badge.innerHTML = '<strong>' + esc(nombre) + '</strong> <span class="text-muted small">(Alista, Pita, Empaca)</span>';
+        contGris.appendChild(badge);
+      });
     }
-    nombres.forEach((n, i) => {
-      const div = document.createElement('div');
-      div.className = 'rot-item';
-      div.innerHTML = '<span class="rot-badge" style="background:' + color + '">' + (i + 1) + '</span> ' + esc(n);
-      cont.appendChild(div);
-    });
-  };
+  }
 
-  pintarLista(contA, porRol.Alistar, '#2fb457');
-  pintarLista(contP, porRol.Pitar, '#0d6efd');
-  pintarLista(contE, porRol.Empacar, '#ffc107');
+  // Pintar cada trio estandar
+  if (contTrios) {
+    contTrios.innerHTML = '';
+    const nombresGrupos = Object.keys(GRUPOS_ROTACION);
+    let idxCol = 0;
+    const cols = ['col-md-4', 'col-md-4', 'col-md-4'];
+
+    nombresGrupos.forEach(nombreGrupo => {
+      const grupo = GRUPOS_ROTACION[nombreGrupo];
+      const miembrosAsignados = asignaciones.filter(a => a.grupo === nombreGrupo);
+
+      const col = document.createElement('div');
+      col.className = cols[idxCol % 3];
+
+      const card = document.createElement('div');
+      card.className = 'rot-grupo-card';
+      card.style.borderLeftColor = grupo.hex;
+      card.style.background = grupo.color;
+
+      const header = document.createElement('div');
+      header.className = 'rot-grupo-card-header';
+      header.style.background = grupo.hex;
+      header.style.color = ['#ffc107', '#FFDAB9', '#FFFACD'].includes(grupo.color) ? '#000' : '#fff';
+      header.innerHTML = '&#11044; ' + esc(nombreGrupo);
+      card.appendChild(header);
+
+      const body = document.createElement('div');
+      body.className = 'rot-grupo-card-body';
+
+      if (miembrosAsignados.length) {
+        miembrosAsignados.forEach(a => {
+          const row = document.createElement('div');
+          row.className = 'rot-grupo-miembro';
+          const rolColor = a.rol === 'Alistar' ? '#2fb457' : (a.rol === 'Pitar' ? '#0d6efd' : '#ffc107');
+          const rolTextColor = a.rol === 'Empacar' ? '#000' : '#fff';
+          row.innerHTML = '<span class="rot-rol-badge" style="background:' + rolColor + ';color:' + rolTextColor + '">' + esc(a.rol) + '</span> ' + esc(a.nombre);
+          body.appendChild(row);
+        });
+      } else {
+        // Sin datos: mostrar trio sin asignar
+        grupo.miembros.forEach((nombre, idx) => {
+          const row = document.createElement('div');
+          row.className = 'rot-grupo-miembro text-muted';
+          row.textContent = nombre;
+          body.appendChild(row);
+        });
+      }
+
+      card.appendChild(body);
+      col.appendChild(card);
+      contTrios.appendChild(col);
+      idxCol++;
+    });
+  }
 
   /* Info banner */
-  const info = $('info_rotacion');
   if (info) {
+    const totalStd = Object.values(GRUPOS_ROTACION).reduce((s, g) => s + g.miembros.length, 0);
+    const totalTB5 = GRUPO_ESPECIAL_TB5.miembros.length;
     if (asignaciones.length) {
-      info.innerHTML = '<span class="badge bg-success">' + asignaciones.length + ' personas asignadas</span>';
+      info.innerHTML = '<span class="badge bg-success">7 trios + TB5 (' + totalStd + ' personas en trios, ' + totalTB5 + ' en TB5)</span>';
     } else {
       info.innerHTML = '<span class="badge bg-secondary">Sin rotacion generada</span>';
     }
