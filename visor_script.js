@@ -13,7 +13,7 @@ let CONFIG = Object.assign({
   apiUrl: '',
   modoLocal: true,
   folders: {
-    despachos:   '1tUXm2FVVFWBnyeBrzTlRpobYTKxk7OH8',
+    despachos:   '1u30YFhTsocLuUoFrVUnb6Fk9zwVsT_E_',
     logistica:   '1_e8ycbznm0jA4kOBwkJuXM4EVdcwXzYe',
     recepcion:   '1u5aQURkwKw4CqxejzOSxYgeF6dvcj-T0',
     novedades:   '1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-',
@@ -34,6 +34,57 @@ let CONFIG = Object.assign({
 let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [] };
 let TRASLADOS = [];    // consolidado calculado
 let CHARTS = {};
+
+/* ---------------------------------------------------------------------------
+ * 0. CREDENCIALES DE USUARIO (LOGIN)
+ * ------------------------------------------------------------------------- */
+const CREDENCIALES_VISOR = {
+  administrador:       'Medis2024Admin',
+  lider:              'Medis2024Lider',
+  auxiliar_entrega:   'Medis2024Aux',
+  recibido_logistica: 'Medis2024Recib',
+  planillar_logistica:'Medis2024Plan'
+};
+const LS_LOGIN_VISOR = 'MF_LOGIN_VISOR_OK';
+
+function verificarLoginVisor() {
+  const usuario = val('loginUsuarioVisor');
+  const clave   = val('loginContrasenaVisor');
+  const errDiv  = $('loginErrorVisor');
+
+  if (!usuario) {
+    errDiv.style.display = 'block';
+    errDiv.textContent = 'Seleccione un perfil.'; return;
+  }
+  if (CREDENCIALES_VISOR[usuario] && CREDENCIALES_VISOR[usuario] === clave) {
+    localStorage.setItem(LS_LOGIN_VISOR, usuario);
+    $('pantallaLoginVisor').style.display = 'none';
+    errDiv.style.display = 'none';
+    toast('Sesion iniciada como <strong>' + (PERFILES_LABEL[usuario] || usuario) + '</strong>', 'success');
+  } else {
+    errDiv.style.display = 'block';
+    errDiv.textContent = 'Usuario o contrasena incorrectos';
+    $('loginContrasenaVisor').value = '';
+    $('loginContrasenaVisor').focus();
+  }
+}
+
+function cerrarSesionVisor() {
+  localStorage.removeItem(LS_LOGIN_VISOR);
+  $('pantallaLoginVisor').style.display = 'flex';
+  $('loginUsuarioVisor').value = '';
+  $('loginContrasenaVisor').value = '';
+  $('loginErrorVisor').style.display = 'none';
+  toast('Sesion cerrada.', 'info');
+}
+
+const PERFILES_LABEL = {
+  administrador: 'ADMINISTRADOR',
+  lider: 'LIDER',
+  auxiliar_entrega: 'AUXILIAR ENTREGA',
+  recibido_logistica: 'RECIBIDO LOGISTICA',
+  planillar_logistica: 'PLANILLAR LOGISTICA'
+};
 
 /* ---------------------------------------------------------------------------
  * 1. UTILIDADES BASE + LECTURA DINAMICA POR NOMBRE DE COLUMNA
@@ -311,6 +362,7 @@ function trasladosFiltrados() {
   const fo = val('f_origen'), fd = val('f_destino'), fz = val('f_zona');
   const fe = val('f_estado'), fu = val('f_urgente');
   const q = normalizarCabecera(val('buscar_s1'));
+  const ult5 = val('buscar_traslado_5').trim();
   return TRASLADOS.filter(t => {
     if (!dentroDeRango(t.fechaInicial)) return false;
     if (fo && t.origen !== fo) return false;
@@ -320,6 +372,11 @@ function trasladosFiltrados() {
     if (fe === 'NOVEDAD' && !t.tieneNovedad) return false;
     if (fe && fe !== 'NOVEDAD' && t.estado !== fe) return false;
     if (q && !normalizarCabecera(JSON.stringify(t.crudo)).includes(q)) return false;
+    // Filtro por ultimos 5 digitos del traslado
+    if (ult5) {
+      const numTraslado = String(obtenerValorPorNombreColumna(t.crudo, A.traslado) || '').trim();
+      if (numTraslado.slice(-5) !== ult5) return false;
+    }
     return true;
   });
 }
@@ -423,42 +480,4 @@ function pintarTabla(headId, bodyId, columnas, filas, claseFila) {
 }
 
 function badgeEstado(estado) {
-  const m = { 'CUMPLIDO': 'est-cumplido', 'EN TRANSITO': 'est-transito', 'PENDIENTE': 'est-pendiente', 'NOVEDAD': 'est-novedad' };
-  return `<span class="badge-est ${m[estado] || 'est-pendiente'}">${esc(estado)}</span>`;
-}
-
-/* ---------- SECCION 1: consolidado de traslados ---------- */
-function pintarSeccion1(lista) {
-  const columnas = [
-    { titulo: 'Marca temporal', alias: A.marca },
-    { titulo: 'Correo electrónico', alias: A.correo },
-    { titulo: 'Bodega Origen', alias: A.origen },
-    { titulo: 'Documento TRASLADO', alias: A.traslado },
-    { titulo: 'QUIEN ALISTA', alias: A.alista },
-    { titulo: 'DESTINO', alias: A.destino },
-    { titulo: 'ZONA', alias: A.zona },
-    { titulo: 'Urgente', fn: t => t.urgente, html: false },
-    { titulo: 'SEGUIMIENTO', fn: t => badgeEstado(t.estado), html: true },
-    { titulo: 'RESPONSABLE ENTREGA CENDIS', alias: A.respCendis },
-    { titulo: 'TIPO', alias: A.tipo },
-    { titulo: 'FECHA ENTREGA LOGISTICA', alias: A.fEntregaLog },
-    { titulo: 'QUIEN RECIBE LOGISTICA', alias: A.recibeLog },
-    { titulo: 'FECHA PLANILLA ENVIO LOGISTICA', alias: A.fPlanilla },
-    { titulo: 'CONDUCTOR', alias: A.conductor },
-    { titulo: 'PLANILLA', alias: A.planilla },
-    { titulo: 'FECHA RECIBIDO EN PUNTO', alias: A.fRecibidoPto },
-    { titulo: 'QUIN RECIBE', alias: A.quienRecibe },
-    { titulo: 'mes', alias: A.mes },
-    { titulo: 'T. Alistamiento', fn: t => formatoDuracion(t.tAlistamiento) },
-    { titulo: 'T. Espera Despacho', fn: t => formatoDuracion(t.tEsperaDespacho) },
-    { titulo: 'T. Tránsito', fn: t => formatoDuracion(t.tTransito) },
-    { titulo: 'Novedad', fn: t => (t.tieneNovedad ? 'SI' : 'NO') }
-  ];
-  pintarTabla('head_s1', 'body_s1', columnas, lista, t =>
-    urgenteEnRiesgo(t) ? 'fila-urgente-pendiente' : (t.estado === 'CUMPLIDO' ? 'fila-cumplido' : ''));
-  $('info_s1').textContent = `${lista.length} traslados · ${lista.filter(urgenteEnRiesgo).length} urgentes en riesgo`;
-}
-
-/* ---------- SECCION 2: recepcion tecnica de traslados externos ---------- */
-function recepcionFiltrada() {
-  const q = norm
+  const m = { 'CUMPLIDO': 'est-cumplido', 'EN T
