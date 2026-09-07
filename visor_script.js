@@ -9,8 +9,10 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-let CONFIG = Object.assign({
-  apiUrl: 'https://script.google.com/macros/s/AKfycbzkMtCzR_HyVXE7YXiKuS8oHMIya0tXYhqTtU6dH_cX5FHecd4nMFs-FeZ1Oo338J4d/exec',
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbzkMtCzR_HyVXE7YXiKuS8oHMIya0tXYhqTtU6dH_cX5FHecd4nMFs-FeZ1Oo338J4d/exec';
+
+const VISOR_DEFAULTS = {
+  apiUrl: VISOR_API_URL,
   modoLocal: false,
   folders: {
     despachos:   '1u30YFhTsocLuUoFrVUnb6Fk9zwVsT_E_',
@@ -28,7 +30,23 @@ let CONFIG = Object.assign({
     facturacion: { file: 'BD_FACTURA_TRANSPORTE',         sheet: 'DATOS' },
     inventario:  { file: 'BD_VERIFICACION_INVENTARIO',     sheet: 'DATOS' }
   }
-}, JSON.parse(localStorage.getItem(LS_KEY_VISOR) || '{}'));
+};
+
+function cargarConfigVisor() {
+  try {
+    const raw = localStorage.getItem(LS_KEY_VISOR);
+    const cfg = raw ? Object.assign({}, VISOR_DEFAULTS, JSON.parse(raw)) : Object.assign({}, VISOR_DEFAULTS);
+    /* Forzar URL de Web App si el usuario no la ha configurado */
+    if (!cfg.apiUrl || cfg.apiUrl.trim() === '') cfg.apiUrl = VISOR_API_URL;
+    /* Si la URL esta configurada, modo local debe estar desactivado */
+    if (cfg.apiUrl && cfg.apiUrl.trim() !== '' && cfg.modoLocal) {
+      cfg.modoLocal = false;
+    }
+    return cfg;
+  } catch (e) { return Object.assign({}, VISOR_DEFAULTS); }
+}
+
+let CONFIG = cargarConfigVisor();
 
 /** Datos crudos por fuente y datos derivados. */
 let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [] };
