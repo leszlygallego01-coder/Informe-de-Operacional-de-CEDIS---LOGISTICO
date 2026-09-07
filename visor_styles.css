@@ -15,6 +15,48 @@
 
 body { background: var(--mf-gris); font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #1f2d3d; }
 
+/* ---------- Toast ---------- */
+.mf-toast-wrap {
+  position: fixed; top: 16px; right: 16px; z-index: 9999;
+  display: flex; flex-direction: column; gap: 6px; max-width: 380px;
+}
+
+/* ---------- Login overlay ---------- */
+.mf-login-overlay {
+  position: fixed; inset: 0; z-index: 99999;
+  background: linear-gradient(135deg, #0d6efd 0%, #2fb457 100%);
+  display: flex; align-items: center; justify-content: center;
+}
+.mf-login-box {
+  background: #fff; border-radius: 18px; width: 94%; max-width: 440px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.35); overflow: hidden;
+}
+.mf-login-header {
+  background: linear-gradient(90deg, #0d6efd, #2fb457);
+  padding: 24px 28px 16px; text-align: center; color: #fff;
+}
+.mf-login-header img { height: 60px; margin-bottom: 6px; }
+.mf-login-header h4 { margin: 0; font-weight: 800; font-size: 1rem; }
+.mf-login-header p { margin: 2px 0 0; font-size: .85rem; opacity: .9; }
+.mf-login-body { padding: 24px 28px; }
+.mf-login-body label { font-weight: 700; font-size: .85rem; color: #1f2d3d; }
+.mf-login-error {
+  display: none; background: #ffe3e3; color: #a31220; border: 1px solid #f5c6cb;
+  border-radius: 8px; padding: 8px 12px; font-size: .85rem; margin-bottom: 12px; text-align: center;
+}
+.mf-login-btn {
+  width: 100%; padding: 12px; border: none; border-radius: 10px;
+  background: linear-gradient(90deg, #0d6efd, #2fb457);
+  color: #fff; font-weight: 800; font-size: 1rem; cursor: pointer;
+  letter-spacing: 1px; transition: opacity .2s;
+}
+.mf-login-btn:hover { opacity: .9; }
+.mf-login-btn:active { transform: scale(.98); }
+.mf-login-footer {
+  text-align: center; padding: 14px 20px; font-size: .75rem; color: #6b7a90;
+  border-top: 1px solid #eee;
+}
+
 .mf-navbar {
   background: linear-gradient(90deg, var(--mf-azul) 0%, var(--mf-verde) 100%);
   color: #fff; box-shadow: 0 2px 10px rgba(13, 110, 253, .25);
@@ -96,4 +138,4 @@ body { background: var(--mf-gris); font-family: "Segoe UI", Roboto, Arial, sans-
   .solo-impresion th, .solo-impresion td { border: 1px solid #666; padding: 3px 4px; }
   .solo-impresion thead th { background: #e8f0fe !important; -webkit-print-color-adjust: exact; }
   @page { size: landscape; margin: 10mm; }
-}
+                                         }
