@@ -10,7 +10,7 @@ const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
 let CONFIG = Object.assign({
-  apiUrl: '',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbzkMtCzR_HyVXE7YXiKuS8oHMIya0tXYhqTtU6dH_cX5FHecd4nMFs-FeZ1Oo338J4d/exec',
   modoLocal: false,
   folders: {
     despachos:   '1u30YFhTsocLuUoFrVUnb6Fk9zwVsT_E_',
