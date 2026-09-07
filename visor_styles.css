@@ -34,7 +34,6 @@ body.mf-login-activo {
   display: flex; align-items: center; justify-content: center;
   overflow-y: auto;
 }
-}
 .mf-login-overlay.oculto { display: none !important; }
 .mf-login-box {
   background: #fff; border-radius: 18px; width: 94%; max-width: 440px;
@@ -155,4 +154,115 @@ body.mf-login-activo {
   .solo-impresion th, .solo-impresion td { border: 1px solid #666; padding: 3px 4px; }
   .solo-impresion thead th { background: #e8f0fe !important; -webkit-print-color-adjust: exact; }
   @page { size: landscape; margin: 10mm; }
+}
+
+/* ---------- Apertura del Dia: panel de rotacion ---------- */
+.mf-apertura-dia {
+  background: #fff;
+  border: 2px solid var(--mf-verde);
+  border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(47, 180, 87, .12);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.mf-apertura-header {
+  background: linear-gradient(90deg, var(--mf-verde) 0%, var(--mf-azul) 100%);
+  padding: 14px 20px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mf-apertura-body {
+  padding: 18px 20px;
+}
+.mf-apertura-footer {
+  padding: 10px 20px;
+  border-top: 1px solid var(--mf-borde);
+  background: #f8fafc;
+  text-align: right;
+}
+
+/* Columnas de rotacion */
+.rot-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.rot-col {
+  flex: 1 1 200px;
+  min-width: 180px;
+  max-width: 340px;
+}
+.rot-col-header {
+  font-weight: 800;
+  font-size: .88rem;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 8px 12px;
+  border-radius: 10px 10px 0 0;
+  color: #fff;
+  text-align: center;
+}
+.rot-col-header.alistar  { background: var(--mf-verde); }
+.rot-col-header.pitar    { background: var(--mf-azul); }
+.rot-col-header.empacar  { background: var(--mf-ambar); color: #5a4200; }
+
+.rot-lista {
+  border: 1px solid var(--mf-borde);
+  border-radius: 0 0 10px 10px;
+  padding: 8px 10px;
+  min-height: 60px;
+  background: #fafcff;
+}
+.rot-item {
+  padding: 5px 8px;
+  font-size: .82rem;
+  border-bottom: 1px solid #f0f3f8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rot-item:last-child { border-bottom: none; }
+
+/* Rotacion badge (numero dentro de cada lista) */
+.rot-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: .7rem;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* Rotacion info banner */
+.rot-info-banner {
+  background: linear-gradient(90deg, #eef6ff 0%, #e9f9ee 100%);
+  border: 1px dashed var(--mf-verde);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: .84rem;
+  color: #2c5a3a;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rot-info-banner .rot-info-icon {
+  font-size: 1.2rem;
+}
+.rot-info-banner strong {
+  color: var(--mf-verde);
+}
+
+@media (max-width: 768px) {
+  .rot-row { flex-direction: column; }
+  .rot-col { max-width: 100%; }
+  .mf-apertura-body { padding: 12px 14px; }
 }
