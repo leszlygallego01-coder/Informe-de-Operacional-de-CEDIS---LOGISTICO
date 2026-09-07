@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Operación CENDIS - LOGÍSTICA | MEDISFARMA</title>
+  <title>Operacion CENDIS - LOGISTICA | MEDISFARMA</title>
 
   <!-- Diagnostico de errores JS -->
   <script>
@@ -75,7 +75,6 @@
   var LS_LOGIN  = 'MF_LOGIN_OK';
   var LS_PERFIL = 'MF_PERFIL_ACTIVO';
 
-  /* ---------- LOGIN ---------- */
   function doLoginVisor(){
     var u = document.getElementById('loginUsuarioVisor');
     var p = document.getElementById('loginContrasenaVisor');
@@ -97,7 +96,6 @@
     }
   }
 
-  /* ---------- CIERRE DE SESION ---------- */
   function doLogoutVisor(){
     localStorage.removeItem(LS_LOGIN);
     localStorage.removeItem(LS_PERFIL);
@@ -113,7 +111,6 @@
     showToast('Sesion cerrada correctamente.', 'info');
   }
 
-  /* ---------- TOAST SIMPLE ---------- */
   function showToast(msg, type){
     var tw = document.getElementById('toastWrap');
     if(!tw) return;
@@ -125,44 +122,35 @@
     setTimeout(function(){ if(d.parentNode) d.remove(); }, 5000);
   }
 
-  /* ---------- REGISTRAR EVENTOS INMEDIATAMENTE ---------- */
   var btn = document.getElementById('btnLoginVisor');
   if(btn){
     btn.addEventListener('click', doLoginVisor);
-    btn.addEventListener('touchend', function(ev){
-      ev.preventDefault(); doLoginVisor();
-    },{passive:false});
+    btn.addEventListener('touchend', function(ev){ ev.preventDefault(); doLoginVisor(); },{passive:false});
   }
   var pw = document.getElementById('loginContrasenaVisor');
   if(pw) pw.addEventListener('keydown', function(ev){ if(ev.key==='Enter') doLoginVisor(); });
-  /* Boton CERRAR SESION (puede no existir aun si la navbar no se parseo) */
+
   function bindLogoutVisor(){
     var btnOut = document.getElementById('btnCerrarSesionVisor');
     if(btnOut && !btnOut._mfLogoutBound){
       btnOut._mfLogoutBound = true;
       btnOut.addEventListener('click', doLogoutVisor);
-      btnOut.addEventListener('touchend', function(ev){
-        ev.preventDefault(); doLogoutVisor();
-      },{passive:false});
+      btnOut.addEventListener('touchend', function(ev){ ev.preventDefault(); doLogoutVisor(); },{passive:false});
     }
   }
   bindLogoutVisor();
-  /* Reintentar despues de que todo el HTML se parse */
   setTimeout(bindLogoutVisor, 100);
   setTimeout(bindLogoutVisor, 500);
   document.addEventListener('DOMContentLoaded', bindLogoutVisor);
 
-  /* ---------- VERIFICAR SESION PREVIA ---------- */
   var prev = localStorage.getItem(LS_LOGIN);
   var o = document.getElementById('pantallaLoginVisor');
-  /* Verificar si viene sesion por URL desde el CARGUE (cross-domain) */
   var urlParams = new URLSearchParams(window.location.search);
   var sesionURL = urlParams.get('sesion');
   if(sesionURL && CRED[sesionURL]){
     localStorage.setItem(LS_LOGIN, sesionURL);
     localStorage.setItem(LS_PERFIL, sesionURL);
     prev = sesionURL;
-    /* Limpiar la URL para no mostrar el parametro */
     window.history.replaceState({}, '', window.location.pathname);
   }
   if(prev && CRED[prev]){
@@ -172,7 +160,6 @@
     document.body.classList.add('mf-login-activo');
   }
 
-  /* ---------- INTERCEPTAR LINK AL CARGUE PARA PASAR SESION ---------- */
   document.addEventListener('DOMContentLoaded', function(){
     var linkCargue = document.querySelector('a[href*="Cargue-CENDIS---LOGISTICA"]');
     if(linkCargue){
@@ -186,7 +173,6 @@
     }
   });
 
-  /* ---------- EXPORTAR A GLOBAL ---------- */
   window._doLoginVisorEarly  = doLoginVisor;
   window._doLogoutVisorEarly = doLogoutVisor;
 })();
@@ -197,14 +183,14 @@
   <div class="d-flex align-items-center gap-3">
     <img src="assets/logo.jpeg" alt="Logo Medisfarma" class="mf-logo">
     <div>
-      <div class="mf-titulo">OPERACIÓN CENDIS - LOGÍSTICA</div>
-      <div class="mf-sub">Seguimiento de traslados, novedades, inventario y métricas &middot; Google Drive / Looker Studio</div>
+      <div class="mf-titulo">OPERACION CENDIS - LOGISTICA</div>
+      <div class="mf-sub">Seguimiento de traslados, rotacion diaria, novedades, inventario y metricas &middot; Google Drive</div>
     </div>
   </div>
   <div class="d-flex align-items-center gap-2">
     <span id="estadoApi" class="badge bg-light text-dark">Sin datos</span>
     <button class="btn btn-outline-info btn-sm" id="btnProbarApi" title="Probar conexion con Google Drive">&#127760; Probar Conexion</button>
-    <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalConfig">&#9881; Configuración</button>
+    <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalConfig">&#9881; Configuracion</button>
     <button class="btn btn-light btn-sm" id="btnRefrescar">&#8635; Actualizar datos</button>
     <button class="btn btn-light btn-sm" id="btnExportar">&#8681; Exportar consolidado</button>
     <button class="btn btn-outline-light btn-sm" id="btnCerrarSesionVisor">&#128274; Cerrar Sesion</button>
@@ -244,20 +230,67 @@
     </div>
   </div>
 
+  <!-- ============================ APERTURA DEL DIA (NUEVA) ============================ -->
+  <div class="mf-panel mf-apertura-dia mb-3">
+    <div class="mf-panel-header d-flex justify-content-between align-items-center">
+      <span>&#128337; APERTURA DEL DIA &mdash; Rotacion de Personal</span>
+      <span class="d-flex align-items-center gap-2">
+        <span class="small text-muted" id="info_rotacion"></span>
+        <button class="btn btn-sm btn-warning" id="btnGenerarRotacion">&#127922; Generar Rotacion</button>
+        <button class="btn btn-sm btn-success" id="btnGuardarRotacion">&#128190; Guardar en Drive</button>
+      </span>
+    </div>
+    <div class="mf-panel-body">
+      <div class="alert alert-info py-2 small mb-2">
+        <strong>Regla:</strong> 32 personas rotan en 3 roles (Alistar, Pitar, Empacar). Cada persona hace <strong>un solo rol por dia</strong>
+        y <strong>no repite el mismo rol dentro de 3 dias consecutivos</strong>. La rotacion se asigna por cada traslado
+        (exceptuando la factura de transporte).
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-md-3"><label class="form-label small fw-bold">Fecha de la Apertura</label>
+          <input type="date" class="form-control form-control-sm" id="rot_fecha"></div>
+        <div class="col-md-9"><span id="rot_estado" class="mf-estado"></span></div>
+      </div>
+      <div class="row g-2">
+        <!-- Columna Alistar -->
+        <div class="col-md-4">
+          <div class="rot-col">
+            <div class="rot-col-header" style="background:#2fb457;color:#fff">ALISTAR</div>
+            <div id="rot_lista_alistar" class="rot-lista"></div>
+          </div>
+        </div>
+        <!-- Columna Pitar -->
+        <div class="col-md-4">
+          <div class="rot-col">
+            <div class="rot-col-header" style="background:#0d6efd;color:#fff">PITAR</div>
+            <div id="rot_lista_pitar" class="rot-lista"></div>
+          </div>
+        </div>
+        <!-- Columna Empacar -->
+        <div class="col-md-4">
+          <div class="rot-col">
+            <div class="rot-col-header" style="background:#ffc107;color:#000">EMPACAR</div>
+            <div id="rot_lista_empacar" class="rot-lista"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================ KPIs ============================ -->
   <div class="row g-3 mb-3" id="kpiRow">
     <div class="col-md-2 col-6"><div class="kpi-card"><div class="kpi-label">Traslados</div>
       <div class="kpi-valor" id="kpi_total">0</div><div class="kpi-detalle">en el rango filtrado</div></div></div>
     <div class="col-md-2 col-6"><div class="kpi-card verde"><div class="kpi-label">Cumplidos</div>
       <div class="kpi-valor text-success" id="kpi_cumplidos">0</div><div class="kpi-detalle" id="kpi_cumplimiento">0% de cumplimiento</div></div></div>
-    <div class="col-md-2 col-6"><div class="kpi-card ambar"><div class="kpi-label">En tránsito / Pendientes</div>
+    <div class="col-md-2 col-6"><div class="kpi-card ambar"><div class="kpi-label">En transito / Pendientes</div>
       <div class="kpi-valor" id="kpi_pendientes">0</div><div class="kpi-detalle">sin recibir en punto</div></div></div>
     <div class="col-md-2 col-6"><div class="kpi-card rojo"><div class="kpi-label">Urgentes en riesgo</div>
       <div class="kpi-valor text-danger" id="kpi_urgentes">0</div><div class="kpi-detalle">urgentes no enviados/entregados</div></div></div>
     <div class="col-md-2 col-6"><div class="kpi-card rojo"><div class="kpi-label">Novedades / Anulaciones</div>
       <div class="kpi-valor" id="kpi_novedades">0</div><div class="kpi-detalle" id="kpi_novedades_abiertas">0 sin solucionar</div></div></div>
     <div class="col-md-2 col-6"><div class="kpi-card"><div class="kpi-label">Diferencias de inventario</div>
-      <div class="kpi-valor text-danger" id="kpi_dif_inv">0</div><div class="kpi-detalle">ítems con faltante/sobrante</div></div></div>
+      <div class="kpi-valor text-danger" id="kpi_dif_inv">0</div><div class="kpi-detalle">items con faltante/sobrante</div></div></div>
   </div>
 
   <!-- ============================ TIEMPOS Y GRAFICAS ============================ -->
@@ -268,7 +301,7 @@
     <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo de Espera Despacho (prom.)</div>
       <div class="kpi-valor" id="kpi_t_espera">--</div>
       <div class="kpi-detalle">FECHA PLANILLA ENVIO &minus; FECHA ENTREGA LOGISTICA</div></div></div>
-    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo de Tránsito / Entrega en Punto (prom.)</div>
+    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo de Transito / Entrega en Punto (prom.)</div>
       <div class="kpi-valor" id="kpi_t_transito">--</div>
       <div class="kpi-detalle">FECHA RECIBIDO EN PUNTO &minus; FECHA PLANILLA ENVIO</div></div></div>
   </div>
@@ -306,7 +339,7 @@
   <!-- ============================ SECCION 2 ============================ -->
   <div class="mf-panel">
     <div class="mf-panel-header">
-      <span>2. MONITOR DE RECEPCIÓN TÉCNICA DE TRASLADOS EXTERNOS</span>
+      <span>2. MONITOR DE RECEPCION TECNICA DE TRASLADOS EXTERNOS</span>
       <span class="small text-muted" id="info_s2"></span>
     </div>
     <div class="mf-panel-body">
@@ -326,7 +359,7 @@
       <div class="alert alert-info py-2 small">
         Las modificaciones y anulaciones alimentan el indicador de novedades, pero en el seguimiento general
         se contabilizan como <strong>CUMPLIDO</strong> conservando la <strong>Marca temporal</strong> original,
-        de modo que el cálculo de tiempos reales no se altera.
+        de modo que el calculo de tiempos reales no se altera.
       </div>
       <input class="form-control form-control-sm mb-2" id="buscar_s3" placeholder="Buscar por traslado, causa, solicitante...">
       <div class="tabla-scroll"><table class="table table-sm table-bordered tabla-visor mb-0">
@@ -337,7 +370,7 @@
   <!-- ============================ SECCION 4 ============================ -->
   <div class="mf-panel">
     <div class="mf-panel-header">
-      <span>4. CONTROL Y VERIFICACIÓN DE INVENTARIO (CENDIS vs B05)</span>
+      <span>4. CONTROL Y VERIFICACION DE INVENTARIO (CENDIS vs B05)</span>
       <span class="small text-muted" id="info_s4"></span>
     </div>
     <div class="mf-panel-body">
@@ -345,8 +378,8 @@
         <div class="col-md-3"><select class="form-select form-select-sm" id="f_bodega_inv">
           <option value="">Todas las bodegas</option><option>CENDIS</option><option>B05</option></select></div>
         <div class="col-md-3"><select class="form-select form-select-sm" id="f_solo_dif">
-          <option value="">Todos los ítems</option><option value="1">Solo con diferencia</option></select></div>
-        <div class="col-md-6"><input class="form-control form-control-sm" id="buscar_s4" placeholder="Buscar por molécula, código, lote..."></div>
+          <option value="">Todos los items</option><option value="1">Solo con diferencia</option></select></div>
+        <div class="col-md-6"><input class="form-control form-control-sm" id="buscar_s4" placeholder="Buscar por molecula, codigo, lote..."></div>
       </div>
       <div class="tabla-scroll"><table class="table table-sm table-bordered tabla-visor mb-0">
         <thead><tr id="head_s4"></tr></thead><tbody id="body_s4"></tbody></table></div>
@@ -355,7 +388,7 @@
 
 </div>
 
-<!-- Área usada solo al imprimir la planilla de despachos -->
+<!-- Area usada solo al imprimir la planilla de despachos -->
 <div id="areaPlanillaImpresion" class="solo-impresion"></div>
 
 <!-- ============================ MODAL CONFIGURACION ============================ -->
@@ -363,7 +396,7 @@
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header text-white" style="background:#0d6efd">
-        <h5 class="modal-title">Configuración de fuentes de datos</h5>
+        <h5 class="modal-title">Configuracion de fuentes de datos</h5>
         <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -378,21 +411,25 @@
         <div class="row g-2">
           <div class="col-md-6"><label class="form-label">ID Carpeta Drive Despachos</label>
             <input class="form-control" id="v_folder_despachos" value="1u30YFhTsocLuUoFrVUnb6Fk9zwVsT_E_"></div>
-          <div class="col-md-6"><label class="form-label">ID Carpeta Drive Logística</label>
+          <div class="col-md-6"><label class="form-label">ID Carpeta Drive Logistica</label>
             <input class="form-control" id="v_folder_logistica" value="1_e8ycbznm0jA4kOBwkJuXM4EVdcwXzYe"></div>
-          <div class="col-md-6"><label class="form-label">ID Carpeta Drive Recepción Técnica</label>
+          <div class="col-md-6"><label class="form-label">ID Carpeta Drive Recepcion Tecnica</label>
             <input class="form-control" id="v_folder_recepcion" value="1u5aQURkwKw4CqxejzOSxYgeF6dvcj-T0"></div>
           <div class="col-md-6"><label class="form-label">ID Carpeta Drive Novedades</label>
             <input class="form-control" id="v_folder_novedades" value="1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-"></div>
           <div class="col-md-6"><label class="form-label">ID Carpeta Drive Inventario</label>
             <input class="form-control" id="v_folder_inventario" value="11Iml2ggmvAK8aHeUbDGeWbyhLxCtrPoY"></div>
-          <div class="col-md-6"><label class="form-label">ID Carpeta Drive Facturación Transporte</label>
+          <div class="col-md-6"><label class="form-label">ID Carpeta Drive Facturacion Transporte</label>
             <input class="form-control" id="v_folder_facturacion" value="1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-"></div>
+          <div class="col-md-6"><label class="form-label">ID Carpeta Drive Seguridad</label>
+            <input class="form-control" id="v_folder_seguridad" value="1I8XfW5vjt5qFkhnd5m6anaUA9ETVHf_N"></div>
+          <div class="col-md-6"><label class="form-label">ID Carpeta Drive Rotacion Diaria</label>
+            <input class="form-control" id="v_folder_rotacion" value="1I8XfW5vjt5qFkhnd5m6anaUA9ETVHf_N"></div>
         </div>
         <div class="form-check mt-3">
           <input class="form-check-input" type="checkbox" id="v_modo_local">
           <label class="form-check-label" for="v_modo_local">
-            Usar los datos guardados localmente por el módulo de Cargue (sin conexión a Drive)
+            Usar los datos guardados localmente por el modulo de Cargue (sin conexion a Drive)
           </label>
         </div>
       </div>
