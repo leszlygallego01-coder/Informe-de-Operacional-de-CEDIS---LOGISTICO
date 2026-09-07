@@ -185,7 +185,7 @@ body.mf-login-activo {
   text-align: right;
 }
 
-/* Columnas de rotacion */
+/* Columnas de rotacion — LEGADO (columnas por rol) */
 .rot-row {
   display: flex;
   gap: 14px;
@@ -239,6 +239,85 @@ body.mf-login-activo {
   font-weight: 800;
   color: #fff;
   flex-shrink: 0;
+}
+
+/* ===== NUEVO: Trios de Rotacion por Grupo ===== */
+.rot-grupo {
+  border: 1px solid var(--mf-borde);
+  border-radius: 10px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.rot-grupo-header {
+  padding: 8px 14px;
+  font-weight: 800;
+  font-size: .88rem;
+  letter-spacing: .3px;
+}
+.rot-grupo-body {
+  padding: 10px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Grupo Especial Gris (TB5) */
+.rot-grupo-gris {
+  border: 2px solid #6c757d;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f8f9fa;
+}
+.rot-grupo-gris-badge {
+  display: inline-block;
+  background: #e9ecef;
+  border: 1px solid #adb5bd;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: .82rem;
+  color: #495057;
+}
+
+/* Card de cada trio */
+.rot-grupo-card {
+  border: 1px solid var(--mf-borde);
+  border-left: 5px solid #ccc;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  transition: box-shadow .2s;
+}
+.rot-grupo-card:hover {
+  box-shadow: 0 2px 12px rgba(0,0,0,.1);
+}
+.rot-grupo-card-header {
+  padding: 8px 12px;
+  font-weight: 800;
+  font-size: .82rem;
+  letter-spacing: .3px;
+}
+.rot-grupo-card-body {
+  padding: 8px 12px;
+}
+.rot-grupo-miembro {
+  padding: 4px 8px;
+  font-size: .8rem;
+  border-bottom: 1px solid #f0f3f8;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rot-grupo-miembro:last-child { border-bottom: none; }
+
+/* Badge de rol dentro del trio */
+.rot-rol-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: .7rem;
+  font-weight: 800;
+  letter-spacing: .3px;
+  white-space: nowrap;
 }
 
 /* Rotacion info banner */
