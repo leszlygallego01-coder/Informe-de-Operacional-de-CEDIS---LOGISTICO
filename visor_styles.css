@@ -1,6 +1,6 @@
 /* =============================================================
    MEDISFARMA | visor_styles.css
-   Dashboard de seguimiento, novedades, inventario y mÃ©tricas
+   Dashboard de seguimiento, novedades, inventario y métricas
    ============================================================= */
 
 :root {
@@ -144,7 +144,7 @@ body.mf-login-activo {
   .chart-box { height: 240px; }
 }
 
-/* ---------- Planilla de despachos (impresiÃ³n) ---------- */
+/* ---------- Planilla de despachos (impresión) ---------- */
 .solo-impresion { display: none; }
 
 @media print {
@@ -155,4 +155,4 @@ body.mf-login-activo {
   .solo-impresion th, .solo-impresion td { border: 1px solid #666; padding: 3px 4px; }
   .solo-impresion thead th { background: #e8f0fe !important; -webkit-print-color-adjust: exact; }
   @page { size: landscape; margin: 10mm; }
-              }
+}
