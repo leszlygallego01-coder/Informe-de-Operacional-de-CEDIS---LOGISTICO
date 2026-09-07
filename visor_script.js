@@ -1,7 +1,8 @@
 /* =================================================================================
  * MEDISFARMA | visor_script.js
  * VISOR: consolidado de traslados, recepcion tecnica externa, novedades,
- * control de inventario, filtros, alertas de urgencias y medicion de tiempos.
+ * control de inventario, filtros, alertas de urgencias, medicion de tiempos,
+ * APERTURA DEL DIA (rotacion diaria) y SEGURIDAD.
  * Toda la lectura se hace por NOMBRE DE CABECERA (nunca por indice de columna).
  * ================================================================================= */
 'use strict';
@@ -21,6 +22,8 @@ const VISOR_DEFAULTS = {
     novedades:   '1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-',
     inventario:  '11Iml2ggmvAK8aHeUbDGeWbyhLxCtrPoY',
     facturacion: '1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-',
+    seguridad:   '1I8XfW5vjt5qFkhnd5m6anaUA9ETVHf_N',
+    rotacion:    '1I8XfW5vjt5qFkhnd5m6anaUA9ETVHf_N',
     backup:      '1HVTZyLasrbZArTN34kmc0lCKaQa2qQ_5'
   },
   perfiles: {
@@ -28,7 +31,9 @@ const VISOR_DEFAULTS = {
     logistica:   { file: 'BD_LOGISTICA_DESPACHOS',         sheet: 'DATOS' },
     recepcion:   { file: 'BD_RECEPCION_TECNICA',           sheet: 'DATOS' },
     facturacion: { file: 'BD_FACTURA_TRANSPORTE',         sheet: 'DATOS' },
-    inventario:  { file: 'BD_VERIFICACION_INVENTARIO',     sheet: 'DATOS' }
+    inventario:  { file: 'BD_VERIFICACION_INVENTARIO',     sheet: 'DATOS' },
+    seguridad:   { file: 'BD_SEGURIDAD_DESPACHOS',         sheet: 'DATOS' },
+    rotacion:    { file: 'BD_ROTACION_DIARIA',             sheet: 'DATOS' }
   }
 };
 
@@ -36,12 +41,13 @@ function cargarConfigVisor() {
   try {
     const raw = localStorage.getItem(LS_KEY_VISOR);
     const cfg = raw ? Object.assign({}, VISOR_DEFAULTS, JSON.parse(raw)) : Object.assign({}, VISOR_DEFAULTS);
-    /* Forzar URL de Web App si el usuario no la ha configurado */
     if (!cfg.apiUrl || cfg.apiUrl.trim() === '') cfg.apiUrl = VISOR_API_URL;
-    /* Si la URL esta configurada, modo local debe estar desactivado */
     if (cfg.apiUrl && cfg.apiUrl.trim() !== '' && cfg.modoLocal) {
       cfg.modoLocal = false;
     }
+    /* Asegurar carpetas nuevas */
+    if (!cfg.folders.seguridad) cfg.folders.seguridad = VISOR_DEFAULTS.folders.seguridad;
+    if (!cfg.folders.rotacion) cfg.folders.rotacion = VISOR_DEFAULTS.folders.rotacion;
     return cfg;
   } catch (e) { return Object.assign({}, VISOR_DEFAULTS); }
 }
@@ -49,9 +55,11 @@ function cargarConfigVisor() {
 let CONFIG = cargarConfigVisor();
 
 /** Datos crudos por fuente y datos derivados. */
-let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [] };
+let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [] };
 let TRASLADOS = [];    // consolidado calculado
 let CHARTS = {};
+let ROTACION_DIA = null; // asignaciones del dia seleccionado
+let ROTACION_HISTORIAL = []; // ultimos 3 dias para restriccion
 
 /* ---------------------------------------------------------------------------
  * 0. CREDENCIALES DE USUARIO (LOGIN)
@@ -143,10 +151,6 @@ function normalizarCabecera(texto) {
     .trim();
 }
 
-/**
- * Devuelve el valor de la fila buscando la columna por NOMBRE (o alias).
- * Funciona igual si las columnas cambian de orden, faltan o se agregan nuevas.
- */
 function obtenerValorPorNombreColumna(fila, nombreColumna) {
   const alias = Array.isArray(nombreColumna) ? nombreColumna : [nombreColumna];
   if (!fila) return '';
@@ -208,7 +212,19 @@ const A = {
   teorica:      ['Cantidad Teorica'],
   fisica:       ['Cantidad Fisica'],
   diferencia:   ['Diferencia', 'Diferencia / Novedad'],
-  estadoInv:    ['Estado / Novedad', 'Estado Verificacion']
+  estadoInv:    ['Estado / Novedad', 'Estado Verificacion'],
+  // Seguridad (nueva tarjeta)
+  guia:         ['Guia', 'Guia de Remision'],
+  facturaSeg:   ['Factura', 'Numero Factura'],
+  proveedor:    ['Proveedor', 'Proveedor Despachos'],
+  unidadesSeg:  ['Unidades', 'Cantidad Unidades Seguridad'],
+  quienRecibeSeg:['Quien Recibe', 'Recibe Seguridad'],
+  // Rotacion
+  quienAlisto:  ['Quien Alisto', 'Quien Alista', 'QUIEN ALISTO'],
+  quienPito:   ['Quien Pito', 'Quien Pita', 'QUIEN PITO'],
+  quienEmpaco: ['Quien Empaco', 'Quien Empaca', 'QUIEN EMPACO'],
+  tipoCarga:    ['Tipo Carga', 'TIPO CARGA'],
+  concepto:     ['Concepto', 'CONCEPTO']
 };
 
 /** Convierte texto de fecha (varios formatos) a Date o null. */
@@ -216,17 +232,14 @@ function aFecha(texto) {
   if (!texto) return null;
   if (texto instanceof Date) return texto;
   let s = String(texto).trim().replace('T', ' ');
-  // dd/mm/yyyy [hh:mm[:ss]]
   let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (m) return new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
-  // yyyy-mm-dd [hh:mm[:ss]]
   m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (m) return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
   const d = new Date(s);
   return isNaN(d.getTime()) ? null : d;
 }
 
-/** Diferencia en horas entre dos fechas (null si falta alguna). */
 function horasEntre(desde, hasta) {
   const a = aFecha(desde), b = aFecha(hasta);
   if (!a || !b) return null;
@@ -234,7 +247,6 @@ function horasEntre(desde, hasta) {
   return h < 0 ? null : h;
 }
 
-/** Formatea horas a "Xd Yh Zm". */
 function formatoDuracion(horas) {
   if (horas === null || horas === undefined || isNaN(horas)) return '--';
   const total = Math.round(horas * 60);
@@ -250,7 +262,7 @@ function promedio(lista) {
 function esSi(v) { return normalizarCabecera(v) === 'si'; }
 
 /* ---------------------------------------------------------------------------
- * MAPA BODEGA → ZONA (desde BODEGAS_Y_ZONAS.xlsx — 179 bodegas, 16 zonas)
+ * MAPA BODEGA → ZONA
  * ------------------------------------------------------------------------- */
 const BODEGA_ZONA_MAP = {"M111 B/G SAN MIGUEL":"ZONA CUNDINAMARCA","M111 B/G CHOACHI":"ZONA CUNDINAMARCA","M111 B/G CHIA":"ZONA CUNDINAMARCA","M111 B/G SOPO":"ZONA CUNDINAMARCA","M111 B/G CAJICA":"ZONA CUNDINAMARCA","M111 B/G COTA":"ZONA CUNDINAMARCA","M111 B/G FACATATIVA":"ZONA CUNDINAMARCA","M111 B/G MOSQUERA":"ZONA CUNDINAMARCA","M111 B/G MADRID":"ZONA CUNDINAMARCA","M111 B/G FUNZA":"ZONA CUNDINAMARCA","M111 B/G LA CALERA":"ZONA CUNDINAMARCA","M111 B/G SOACHA":"ZONA CUNDINAMARCA","M111 B/G ZIPAQUIRA":"ZONA CUNDINAMARCA","M111 B/G SIBATE":"ZONA CUNDINAMARCA","M111 B/G BOGOTA":"ZONA CUNDINAMARCA","M112 B/G IPIALES":"ZONA NARIÑO","M112 B/G TUMACO":"ZONA NARIÑO","M112 B/G TUQUERRES":"ZONA NARIÑO","M112 B/G PASTO":"ZONA NARIÑO","M112 B/G SAMANIEGO":"ZONA NARIÑO","M112 B/G LA UNION":"ZONA NARIÑO","M112 B/G ILLANO":"ZONA NARIÑO","M113 B/G SANTANDER DE QUILICHAO":"ZONA CAUCA NORTE","M113 B/G PUERTO TEJADA":"ZONA CAUCA NORTE","M113 B/G CALOTO":"ZONA CAUCA NORTE","M113 B/G PADILLA":"ZONA CAUCA NORTE","M113 B/G VILLARRICA":"ZONA CAUCA NORTE","M113 B/G SANTANDER DE QUILICHAO 2":"ZONA CAUCA NORTE","M114 B/G POPAYAN":"ZONA CAUCA SUR","M114 B/G PATIA":"ZONA CAUCA SUR","M114 B/G EL TAMBO":"ZONA CAUCA SUR","M114 B/G ARGELIA":"ZONA CAUCA SUR","M114 B/G TIMBIO":"ZONA CAUCA SUR","M114 B/G PIENDAMO":"ZONA CAUCA SUR","M115 B/G SOTARA":"ZONA CAUCA CENTRO","M115 B/G PAEZ":"ZONA CAUCA CENTRO","M115 B/G INZA":"ZONA CAUCA CENTRO","M115 B/G SILVIA":"ZONA CAUCA CENTRO","M115 B/G TORO":"ZONA CAUCA CENTRO","M116 B/G TUNJA":"ZONA BOYACA","M116 B/G DUITAMA":"ZONA BOYACA","M116 B/G SOGAMOSO":"ZONA BOYACA","M116 B/G CHIQUINQUIRA":"ZONA BOYACA","M116 B/G MONIQUIRA":"ZONA BOYACA","M116 B/G PAIPA":"ZONA BOYACA","M116 B/G PUERTO BOYACA":"ZONA BOYACA","M117 B/G FLORENCIA":"ZONA CAQUETA","M117 B/G SAN VICENTE":"ZONA CAQUETA","M117 B/G EL DONCELLO":"ZONA CAQUETA","M117 B/G MORELIA":"ZONA CAQUETA","M117 B/G PUERTO RICO":"ZONA CAQUETA","M118 B/G BUGA":"ZONA VALLE","M118 B/G TULUA":"ZONA VALLE","M118 B/G BUGALAGRANDE":"ZONA VALLE","M118 B/G PALMIRA":"ZONA VALLE","M118 B/G YUMBO":"ZONA VALLE","M118 B/G CARTAGO":"ZONA VALLE","M118 B/G LA UNION":"ZONA VALLE","M118 B/G SEVILLA":"ZONA VALLE","M118 B/G ROLDANILLO":"ZONA VALLE","M118 B/G CAICEDONIA":"ZONA VALLE","M119 B/G PEREIRA":"ZONA EJE CAFETERO","M119 B/G MANIZALES":"ZONA EJE CAFETERO","M119 B/G DOSQUEBRADAS":"ZONA EJE CAFETERO","M119 B/G SANTA ROSA DE CABAL":"ZONA EJE CAFETERO","M119 B/G CHINCHINA":"ZONA EJE CAFETERO","M119 B/G FILANDIA":"ZONA EJE CAFETERO","M119 B/G SALAMINA":"ZONA EJE CAFETERO","M120 B/G IBAGUE":"ZONA TOLIMA","M120 B/G ESPINAL":"ZONA TOLIMA","M120 B/G MELGAR":"ZONA TOLIMA","M120 B/G HONDA":"ZONA TOLIMA","M120 B/G LIBANO":"ZONA TOLIMA","M120 B/G MURILLO":"ZONA TOLIMA","M120 B/G LERIDA":"ZONA TOLIMA","M120 B/G AMBALEMA":"ZONA TOLIMA","M121 B/G SANTA MARTA":"ZONA COSTA NORTE","M121 B/G BARRANQUILLA":"ZONA COSTA NORTE","M121 B/G CARTAGENA":"ZONA COSTA NORTE","M121 B/G SOLEDAD":"ZONA COSTA NORTE","M121 B/G VALLEDUPAR":"ZONA COSTA NORTE","M121 B/G SINCELEJO":"ZONA COSTA NORTE","M121 B/G MONTERIA":"ZONA COSTA NORTE","M111 B/G USAQUEN":"ZONA CUNDINAMARCA","M111 B/G SUBA":"ZONA CUNDINAMARCA","M111 B/G ENGATIVA":"ZONA CUNDINAMARCA","M111 B/G BARRIOS UNIDOS":"ZONA CUNDINAMARCA","M111 B/G TEUSAQUILLO":"ZONA CUNDINAMARCA","M111 B/G LOS MARTIRES":"ZONA CUNDINAMARCA","M111 B/G PUENTE ARANDA":"ZONA CUNDINAMARCA","M111 B/G KENNEDY":"ZONA CUNDINAMARCA","M111 B/G FONTIBON":"ZONA CUNDINAMARCA","M111 B/G RAFAEL URIBE":"ZONA CUNDINAMARCA","M111 B/G SAN CRISTOBAL":"ZONA CUNDINAMARCA","M111 B/G BOSA":"ZONA CUNDINAMARCA","M111 B/G TUNJUELITO":"ZONA CUNDINAMARCA","M111 B/G ANTONIO NARIÑO":"ZONA CUNDINAMARCA","M111 B/G USME":"ZONA CUNDINAMARCA","M111 B/G RAFAEL URIBE URIBE":"ZONA CUNDINAMARCA","B/G PRINCIPAL":"BODEGA","B/G BODEGA PRINCIPAL":"BODEGA","B/G CEDI BOGOTA":"BODEGA","B/G CEDI":"BODEGA","B/G BODEGA VIRTUAL":"BODEGA VIRTUAL","B/G BODEGA VALLE":"BODEGA VALLE","B/G CERRADA":"CERRADA","B/G LOCAL":"LOCAL Y ACTIVOS","B/G ACTIVOS":"LOCAL Y ACTIVOS"};
 
@@ -261,7 +273,6 @@ const ZONAS_LISTA = [
   'BODEGA VALLE', 'BODEGA VIRTUAL', 'CERRADA', 'LOCAL Y ACTIVOS'
 ];
 
-/** Busca la zona correspondiente a una bodega por nombre parcial o exacto. */
 function zonaDeBodega(nombreBodega) {
   if (!nombreBodega) return '';
   const nb = String(nombreBodega).trim();
@@ -287,7 +298,6 @@ async function api(action, payload = {}) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(Object.assign({ action }, payload))
     });
-    /* Si la respuesta es HTML (Google login redirect), detectarlo */
     const ct = res.headers.get('Content-Type') || '';
     if (ct.includes('text/html')) {
       throw new Error('La Web App requiere autenticacion. Redespliegue con acceso "Cualquier usuario" (publico).');
@@ -312,17 +322,19 @@ async function cargarDatos() {
     FUENTES = {
       despachos: local.despachos || [], logistica: local.logistica || [],
       recepcion: local.recepcion || [], novedades: local.novedades || [],
-      inventario: local.inventario || [], facturacion: local.facturacion || []
+      inventario: local.inventario || [], facturacion: local.facturacion || [],
+      seguridad: local.seguridad || [], rotacion: local.rotacion || []
     };
     $('estadoApi').className = 'badge bg-warning text-dark';
     $('estadoApi').textContent = 'Sin URL de Web App';
-    toast('⚠ Configure la URL de la Web App en Ajustes para leer datos de Drive.', 'warning');
+    toast('Configure la URL de la Web App en Ajustes para leer datos de Drive.', 'warning');
   } else if (CONFIG.modoLocal) {
     const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
     FUENTES = {
       despachos: local.despachos || [], logistica: local.logistica || [],
       recepcion: local.recepcion || [], novedades: local.novedades || [],
-      inventario: local.inventario || [], facturacion: local.facturacion || []
+      inventario: local.inventario || [], facturacion: local.facturacion || [],
+      seguridad: local.seguridad || [], rotacion: local.rotacion || []
     };
     $('estadoApi').className = 'badge bg-secondary';
     $('estadoApi').textContent = 'Modo local';
@@ -338,12 +350,12 @@ async function cargarDatos() {
       $('estadoApi').className = 'badge bg-danger';
       $('estadoApi').textContent = 'Error de conexion';
       toast('Error al conectar con Drive: ' + e.message + '. Usando datos locales.', 'danger');
-      // Fallback a datos locales
       const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
       FUENTES = {
         despachos: local.despachos || [], logistica: local.logistica || [],
         recepcion: local.recepcion || [], novedades: local.novedades || [],
-        inventario: local.inventario || [], facturacion: local.facturacion || []
+        inventario: local.inventario || [], facturacion: local.facturacion || [],
+        seguridad: local.seguridad || [], rotacion: local.rotacion || []
       };
       console.warn(e);
     }
@@ -357,7 +369,7 @@ async function cargarDatos() {
 async function probarConexion() {
   const btn = $('btnProbarApi');
   const badge = $('estadoApi');
-  if (btn) { btn.disabled = true; btn.innerHTML = '&\#8987; Probando...'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '&#8987; Probando...'; }
   badge.className = 'badge bg-warning text-dark';
   badge.textContent = 'Probando conexion...';
   try {
@@ -375,17 +387,18 @@ async function probarConexion() {
     toast('Error: ' + msg, 'danger');
     console.error('Prueba de conexion fallida:', e);
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '&\#127760; Probar Conexion'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '&#127760; Probar Conexion'; }
   }
 }
 
 /* ---------------------------------------------------------------------------
- * 3. CONSOLIDADO DE TRASLADOS (despachos + logistica + novedades)
+ * 3. CONSOLIDADO DE TRASLADOS (despachos + logistica + novedades + rotacion)
  * ------------------------------------------------------------------------- */
 
 /**
- * Une los registros por numero de traslado. La informacion mas reciente
- * completa (no sobreescribe con vacios) la del registro anterior.
+ * Une los registros por numero de traslado. Incorpora datos de rotacion
+ * (Quien Alisto, Quien Pito, Quien Empaco, Tipo Carga, Concepto) desde
+ * la fuente de despachos donde se guardaron en el Cargue T3.
  */
 function construirConsolidado() {
   const mapa = new Map();
@@ -405,8 +418,6 @@ function construirConsolidado() {
   FUENTES.despachos.forEach(agregar);
   FUENTES.logistica.forEach(agregar);
 
-  // Novedades: indicador aparte; en el seguimiento el traslado se toma CUMPLIDO
-  // conservando la Marca temporal inicial para no alterar los tiempos.
   const novedadesPorTraslado = new Map();
   FUENTES.novedades.forEach(n => {
     const clave = normalizarCabecera(obtenerValorPorNombreColumna(n, A.traslado));
@@ -422,18 +433,25 @@ function construirConsolidado() {
 
     let estado;
     if (fRecibido) estado = 'CUMPLIDO';
-    else if (nov) estado = 'CUMPLIDO';              // modificacion/anulacion = cumplido
+    else if (nov) estado = 'CUMPLIDO';
     else if (fPlanilla) estado = 'EN TRANSITO';
     else estado = 'PENDIENTE';
 
     const urgente = obtenerValorPorNombreColumna(r, A.urgente);
+
+    /* Campos de rotacion enriquecidos (vienen del Cargue T3 → BD_PLANILLA_ENTREGA_DESPACHOS) */
+    const quienAlisto  = obtenerValorPorNombreColumna(r, A.quienAlisto);
+    const quienPito    = obtenerValorPorNombreColumna(r, A.quienPito);
+    const quienEmpaco  = obtenerValorPorNombreColumna(r, A.quienEmpaco);
+    const tipoCarga    = obtenerValorPorNombreColumna(r, A.tipoCarga);
+    const concepto     = obtenerValorPorNombreColumna(r, A.concepto);
 
     return {
       crudo: r,
       novedad: nov,
       traslado: obtenerValorPorNombreColumna(r, A.traslado),
       marca, fEntregaLog, fPlanilla, fRecibido,
-      fechaInicial: marca,                           // se conserva siempre la inicial
+      fechaInicial: marca,
       origen: obtenerValorPorNombreColumna(r, A.origen),
       destino: obtenerValorPorNombreColumna(r, A.destino),
       zona: obtenerValorPorNombreColumna(r, A.zona) || zonaDeBodega(obtenerValorPorNombreColumna(r, A.destino)) || zonaDeBodega(obtenerValorPorNombreColumna(r, A.origen)),
@@ -443,7 +461,13 @@ function construirConsolidado() {
       novedadResuelta: nov ? normalizarCabecera(obtenerValorPorNombreColumna(nov, A.solucionado)) : '',
       tAlistamiento: horasEntre(marca, fEntregaLog),
       tEsperaDespacho: horasEntre(fEntregaLog, fPlanilla),
-      tTransito: horasEntre(fPlanilla, fRecibido)
+      tTransito: horasEntre(fPlanilla, fRecibido),
+      /* Campos enriquecidos */
+      quienAlisto,
+      quienPito,
+      quienEmpaco,
+      tipoCarga,
+      concepto
     };
   });
 }
@@ -489,7 +513,6 @@ function trasladosFiltrados() {
     if (fe === 'NOVEDAD' && !t.tieneNovedad) return false;
     if (fe && fe !== 'NOVEDAD' && t.estado !== fe) return false;
     if (q && !normalizarCabecera(JSON.stringify(t.crudo)).includes(q)) return false;
-    // Filtro por ultimos 5 digitos del traslado
     if (ult5) {
       const numTraslado = String(obtenerValorPorNombreColumna(t.crudo, A.traslado) || '').trim();
       if (numTraslado.slice(-5) !== ult5) return false;
@@ -498,7 +521,6 @@ function trasladosFiltrados() {
   });
 }
 
-/** Urgente en riesgo: marcado urgente y aun no enviado o no entregado en punto. */
 function urgenteEnRiesgo(t) {
   return esSi(t.urgente) && t.estado !== 'CUMPLIDO';
 }
@@ -553,7 +575,7 @@ function pintarGraficas(lista, pAlist, pEspera, pTransito) {
   }], { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } });
 
   dibujar('chartTiempos', 'bar',
-    ['Alistamiento', 'Espera despacho', 'Tránsito'],
+    ['Alistamiento', 'Espera despacho', 'Transito'],
     [{
       label: 'Horas promedio',
       data: [pAlist || 0, pEspera || 0, pTransito || 0].map(v => Math.round(v * 10) / 10),
@@ -575,7 +597,6 @@ function dibujar(canvasId, tipo, labels, datasets, opciones) {
  * 6. RENDERIZADO DE TABLAS
  * ------------------------------------------------------------------------- */
 
-/** Pinta una tabla generica: columnas = [{titulo, alias|fn}] */
 function pintarTabla(headId, bodyId, columnas, filas, claseFila) {
   const head = $(headId), body = $(bodyId);
   head.innerHTML = columnas.map(c => `<th>${esc(c.titulo)}</th>`).join('');
@@ -587,7 +608,7 @@ function pintarTabla(headId, bodyId, columnas, filas, claseFila) {
     columnas.forEach(c => {
       const td = document.createElement('td');
       const v = c.fn ? c.fn(f) : obtenerValorPorNombreColumna(f.crudo || f, c.alias);
-      if (c.html) td.innerHTML = v;         // solo contenido generado internamente
+      if (c.html) td.innerHTML = v;
       else td.textContent = v;
       if (c.clase) td.className = c.clase(f);
       tr.appendChild(td);
@@ -601,11 +622,11 @@ function badgeEstado(estado) {
   return `<span class="badge-est ${m[estado] || 'est-pendiente'}">${esc(estado)}</span>`;
 }
 
-/* ---------- SECCION 1: consolidado de traslados ---------- */
+/* ---------- SECCION 1: consolidado de traslados (con campos enriquecidos) ---------- */
 function pintarSeccion1(lista) {
   const columnas = [
     { titulo: 'Marca temporal', alias: A.marca },
-    { titulo: 'Correo electrónico', alias: A.correo },
+    { titulo: 'Correo electronico', alias: A.correo },
     { titulo: 'Bodega Origen', alias: A.origen },
     { titulo: 'Documento TRASLADO', alias: A.traslado },
     { titulo: 'QUIEN ALISTA', alias: A.alista },
@@ -623,9 +644,16 @@ function pintarSeccion1(lista) {
     { titulo: 'FECHA RECIBIDO EN PUNTO', alias: A.fRecibidoPto },
     { titulo: 'QUIN RECIBE', alias: A.quienRecibe },
     { titulo: 'mes', alias: A.mes },
+    /* --- Campos enriquecidos de rotacion --- */
+    { titulo: 'Quien Alisto', fn: t => t.quienAlisto },
+    { titulo: 'Quien Pito', fn: t => t.quienPito },
+    { titulo: 'Quien Empaco', fn: t => t.quienEmpaco },
+    { titulo: 'Tipo Carga', fn: t => t.tipoCarga },
+    { titulo: 'Concepto', fn: t => t.concepto },
+    /* --- Tiempos --- */
     { titulo: 'T. Alistamiento', fn: t => formatoDuracion(t.tAlistamiento) },
     { titulo: 'T. Espera Despacho', fn: t => formatoDuracion(t.tEsperaDespacho) },
-    { titulo: 'T. Tránsito', fn: t => formatoDuracion(t.tTransito) },
+    { titulo: 'T. Transito', fn: t => formatoDuracion(t.tTransito) },
     { titulo: 'Novedad', fn: t => (t.tieneNovedad ? 'SI' : 'NO') }
   ];
   pintarTabla('head_s1', 'body_s1', columnas, lista, t =>
@@ -633,12 +661,11 @@ function pintarSeccion1(lista) {
   $('info_s1').textContent = `${lista.length} traslados · ${lista.filter(urgenteEnRiesgo).length} urgentes en riesgo`;
 }
 
-/* ---------- SECCION 2: recepcion tecnica de traslados externos ---------- */
+/* ---------- SECCION 2: recepcion tecnica ---------- */
 function recepcionFiltrada() {
   const q = normalizarCabecera(val('buscar_s2'));
   return FUENTES.recepcion.filter(r => {
     const tipo = normalizarCabecera(obtenerValorPorNombreColumna(r, A.tipoRecepcion));
-    // La seccion monitorea traslados externos; si no hay tipo declarado se incluye.
     if (tipo && tipo.indexOf('traslado') === -1) return false;
     if (!dentroDeRango(obtenerValorPorNombreColumna(r, A.fRecepcion) || obtenerValorPorNombreColumna(r, A.marca))) return false;
     if (q && !normalizarCabecera(JSON.stringify(r)).includes(q)) return false;
@@ -649,19 +676,19 @@ function recepcionFiltrada() {
 function pintarSeccion2() {
   const filas = recepcionFiltrada();
   const columnas = [
-    { titulo: 'Fecha Recepción Técnica', alias: A.fRecepcion },
+    { titulo: 'Fecha Recepcion Tecnica', alias: A.fRecepcion },
     { titulo: 'Documento Traslado', alias: A.traslado },
     { titulo: 'Bodega Origen Externa', alias: A.origen },
     { titulo: 'Bodega Destino (CENDIS / B05)', alias: A.destino },
-    { titulo: 'Código Producto / Molécula', alias: A.codigo },
-    { titulo: 'Descripción', alias: A.descripcion },
+    { titulo: 'Codigo Producto / Molecula', alias: A.codigo },
+    { titulo: 'Descripcion', alias: A.descripcion },
     { titulo: 'Lote', alias: A.lote },
     { titulo: 'Fecha Vencimiento', alias: A.vencimiento },
     { titulo: 'Cantidad Enviada', alias: A.cantEnviada },
     { titulo: 'Cantidad Recibida', alias: A.cantRecibida },
     { titulo: 'Diferencia', fn: r => Number(obtenerValorPorNombreColumna(r, A.cantRecibida) || 0) - Number(obtenerValorPorNombreColumna(r, A.cantEnviada) || 0) },
-    { titulo: 'Estado Recepción Técnica', alias: A.estadoRec },
-    { titulo: 'Responsable de Recepción', alias: A.respRec },
+    { titulo: 'Estado Recepcion Tecnica', alias: A.estadoRec },
+    { titulo: 'Responsable de Recepcion', alias: A.respRec },
     { titulo: 'Observaciones', alias: A.observaciones }
   ];
   pintarTabla('head_s2', 'body_s2', columnas, filas, r => {
@@ -669,10 +696,10 @@ function pintarSeccion2() {
     const estado = normalizarCabecera(obtenerValorPorNombreColumna(r, A.estadoRec));
     return (dif !== 0 || estado === 'novedad') ? 'fila-diferencia' : '';
   });
-  $('info_s2').textContent = `${filas.length} ítems recibidos`;
+  $('info_s2').textContent = `${filas.length} items recibidos`;
 }
 
-/* ---------- SECCION 3: novedades, modificaciones y anulaciones ---------- */
+/* ---------- SECCION 3: novedades ---------- */
 function pintarSeccion3() {
   const q = normalizarCabecera(val('buscar_s3'));
   const filas = FUENTES.novedades.filter(n =>
@@ -680,13 +707,13 @@ function pintarSeccion3() {
     (!q || normalizarCabecera(JSON.stringify(n)).includes(q)));
   const columnas = [
     { titulo: 'Marca temporal', alias: A.marca },
-    { titulo: 'Correo electrónico', alias: A.correo },
+    { titulo: 'Correo electronico', alias: A.correo },
     { titulo: 'Bodega Origen del Traslado', alias: A.origen },
     { titulo: 'Bodega Destino del Traslado', alias: A.destino },
     { titulo: 'TRASLADO', alias: A.traslado },
-    { titulo: 'Causa de anulación / modificación', alias: A.causa },
-    { titulo: 'Solicita la corrección', alias: A.solicita },
-    { titulo: 'Teléfono de contacto', alias: A.telefono },
+    { titulo: 'Causa de anulacion / modificacion', alias: A.causa },
+    { titulo: 'Solicita la correccion', alias: A.solicita },
+    { titulo: 'Telefono de contacto', alias: A.telefono },
     { titulo: 'SEGUIMIENTO', alias: A.seguimiento },
     { titulo: 'SOLUCIONADO', alias: A.solucionado },
     { titulo: 'Efecto en seguimiento', fn: () => 'CUMPLIDO (conserva fecha inicial)' }
@@ -696,7 +723,7 @@ function pintarSeccion3() {
   $('info_s3').textContent = `${filas.length} novedades registradas`;
 }
 
-/* ---------- SECCION 4: control y verificacion de inventario ---------- */
+/* ---------- SECCION 4: inventario ---------- */
 function inventarioFiltrado() {
   const bod = val('f_bodega_inv'), soloDif = val('f_solo_dif'), q = normalizarCabecera(val('buscar_s4'));
   return FUENTES.inventario.filter(i => {
@@ -712,15 +739,15 @@ function inventarioFiltrado() {
 function pintarSeccion4() {
   const filas = inventarioFiltrado();
   const columnas = [
-    { titulo: 'Fecha Verificación', fn: i => obtenerValorPorNombreColumna(i, ['Fecha Verificacion']) || obtenerValorPorNombreColumna(i, A.marca) },
+    { titulo: 'Fecha Verificacion', fn: i => obtenerValorPorNombreColumna(i, ['Fecha Verificacion']) || obtenerValorPorNombreColumna(i, A.marca) },
     { titulo: 'Bodega (CENDIS / B05)', alias: A.bodegaInv },
     { titulo: 'Responsable Asignado', alias: A.respInv },
-    { titulo: 'Molécula / Medicamento', alias: A.molecula },
-    { titulo: 'Código Producto', alias: ['Codigo Producto', 'Codigo Producto / Molecula'] },
+    { titulo: 'Molecula / Medicamento', alias: A.molecula },
+    { titulo: 'Codigo Producto', alias: ['Codigo Producto', 'Codigo Producto / Molecula'] },
     { titulo: 'Lote', alias: A.lote },
     { titulo: 'Fecha Vencimiento', alias: A.vencimiento },
-    { titulo: 'Cantidad Teórica', alias: A.teorica },
-    { titulo: 'Cantidad Física', alias: A.fisica },
+    { titulo: 'Cantidad Teorica', alias: A.teorica },
+    { titulo: 'Cantidad Fisica', alias: A.fisica },
     { titulo: 'Diferencia', alias: A.diferencia },
     { titulo: 'Estado / Novedad', alias: A.estadoInv },
     { titulo: 'Observaciones', alias: A.observaciones }
@@ -728,11 +755,277 @@ function pintarSeccion4() {
   pintarTabla('head_s4', 'body_s4', columnas, filas, i =>
     Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) !== 0 ? 'fila-diferencia' : '');
   const conDif = filas.filter(i => Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) !== 0).length;
-  $('info_s4').textContent = `${filas.length} ítems verificados · ${conDif} con diferencia`;
+  $('info_s4').textContent = `${filas.length} items verificados · ${conDif} con diferencia`;
 }
 
 /* ---------------------------------------------------------------------------
- * 7. REFRESCO GENERAL Y EXPORTACION
+ * 7. APERTURA DEL DIA — ROTACION DIARIA DE PERSONAL
+ *    32 auxiliares, 3 roles (Alistar, Pitar, Empacar), restriccion de 3 dias.
+ * ------------------------------------------------------------------------- */
+
+const AUXILIARES_ROTACION = [
+  'Yuri', 'Julio', 'Hernan', 'Diego', 'Brian', 'Karina', 'Jhony', 'Natalia',
+  'Manuel', 'Claudia', 'Daniela', 'Juan', 'LuzL', 'Liz', 'Ana', 'Leidy',
+  'Bivian', 'Vaneza', 'Brayan', 'Nicoll', 'Luis', 'Estefania', 'Angela', 'Camila',
+  'Angie', 'Mayra', 'Derly', 'Luisa', 'LuzN', 'Andrea', 'Andres', 'DiegoE'
+];
+
+const ROLES_ROTACION = ['Alistar', 'Pitar', 'Empacar'];
+
+/**
+ * Genera la rotacion del dia respetando la restriccion de 3 dias:
+ * - Cada persona hace exactamente UN rol por dia.
+ * - Ninguna persona repite el MISMO rol dentro de 3 dias consecutivos.
+ * - La distribucion intenta equilibrar la carga (10-11-11 o similar).
+ *
+ * @param {string} fecha - Fecha ISO (yyyy-mm-dd)
+ * @param {Array} historial - Array de { fecha, asignaciones: [{ nombre, rol }] } de los ultimos 3 dias
+ * @returns {Array} asignaciones: [{ nombre, rol }]
+ */
+function generarRotacion(fecha, historial) {
+  const personas = AUXILIARES_ROTACION.slice();
+  const total = personas.length; // 32
+  const roles = ROLES_ROTACION;
+  const numRoles = roles.length; // 3
+
+  /* Construir mapa de roles recientes por persona:
+     rolesRecientes[nombre] = Set de roles que ha hecho en los ultimos 3 dias */
+  const rolesRecientes = {};
+  personas.forEach(p => { rolesRecientes[p] = new Set(); });
+
+  if (historial && historial.length) {
+    historial.forEach(dia => {
+      if (dia.asignaciones) {
+        dia.asignaciones.forEach(a => {
+          if (rolesRecientes[a.nombre]) {
+            rolesRecientes[a.nombre].add(a.rol);
+          }
+        });
+      }
+    });
+  }
+
+  /* Barajar personas aleatoriamente para distribucion equitativa */
+  const shuffled = personas.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  /* Tamanos objetivo: 32/3 = 10.67 → 11, 11, 10 */
+  const tamanos = [Math.ceil(total / numRoles), Math.ceil(total / numRoles), total - 2 * Math.ceil(total / numRoles)];
+  // Ajustar si el tercero queda negativo
+  if (tamanos[2] < 10) { tamanos[1] = 11; tamanos[2] = 10; }
+
+  const asignados = { Alistar: [], Pitar: [], Empacar: [] };
+  const pendientes = [];
+
+  /* Primera pasada: asignar rol preferido (que no haya hecho en 3 dias) */
+  shuffled.forEach(persona => {
+    const prohibidos = rolesRecientes[persona];
+    const disponibles = roles.filter(r => !prohibidos.has(r));
+
+    if (disponibles.length === 0) {
+      /* Si hizo los 3 roles en los ultimos 3 dias (caso extremo), permitir cualquiera */
+      pendientes.push(persona);
+      return;
+    }
+
+    /* Elegir el rol con menos asignados hasta el momento entre los disponibles */
+    let mejor = null;
+    let menor = Infinity;
+    disponibles.forEach(r => {
+      if (asignados[r].length < tamanos[roles.indexOf(r)] && asignados[r].length < menor) {
+        menor = asignados[r].length;
+        mejor = r;
+      }
+    });
+
+    if (mejor) {
+      asignados[mejor].push(persona);
+    } else {
+      pendientes.push(persona);
+    }
+  });
+
+  /* Segunda pasada: asignar pendientes donde quepan */
+  pendientes.forEach(persona => {
+    const prohibidos = rolesRecientes[persona];
+    let asignado = false;
+    /* Intentar rol no prohibido primero */
+    for (const r of roles) {
+      if (!prohibidos.has(r) && asignados[r].length < tamanos[roles.indexOf(r)] + 2) {
+        asignados[r].push(persona);
+        asignado = true;
+        break;
+      }
+    }
+    /* Si todos prohibidos o llenos, asignar al menos lleno */
+    if (!asignado) {
+      let menor = Infinity;
+      let mejorR = roles[0];
+      roles.forEach(r => {
+        if (asignados[r].length < menor) { menor = asignados[r].length; mejorR = r; }
+      });
+      asignados[mejorR].push(persona);
+    }
+  });
+
+  /* Convertir a array de asignaciones */
+  const resultado = [];
+  roles.forEach(r => {
+    asignados[r].forEach(nombre => {
+      resultado.push({ nombre, rol: r });
+    });
+  });
+
+  return resultado;
+}
+
+/** Pinta las 3 columnas de rotacion en el panel de Apertura del Dia */
+function pintarAperturaDia() {
+  const contA = $('rot_lista_alistar');
+  const contP = $('rot_lista_pitar');
+  const contE = $('rot_lista_empacar');
+  if (!contA) return;
+
+  const asignaciones = ROTACION_DIA || [];
+  const porRol = { Alistar: [], Pitar: [], Empacar: [] };
+  asignaciones.forEach(a => { if (porRol[a.rol]) porRol[a.rol].push(a.nombre); });
+
+  const pintarLista = (cont, nombres, color) => {
+    if (!cont) return;
+    cont.innerHTML = '';
+    if (!nombres.length) {
+      cont.innerHTML = '<div class="rot-item text-muted">Sin asignar</div>';
+      return;
+    }
+    nombres.forEach((n, i) => {
+      const div = document.createElement('div');
+      div.className = 'rot-item';
+      div.innerHTML = '<span class="rot-badge" style="background:' + color + '">' + (i + 1) + '</span> ' + esc(n);
+      cont.appendChild(div);
+    });
+  };
+
+  pintarLista(contA, porRol.Alistar, '#2fb457');
+  pintarLista(contP, porRol.Pitar, '#0d6efd');
+  pintarLista(contE, porRol.Empacar, '#ffc107');
+
+  /* Info banner */
+  const info = $('info_rotacion');
+  if (info) {
+    if (asignaciones.length) {
+      info.innerHTML = '<span class="badge bg-success">' + asignaciones.length + ' personas asignadas</span>';
+    } else {
+      info.innerHTML = '<span class="badge bg-secondary">Sin rotacion generada</span>';
+    }
+  }
+}
+
+/** Genera la rotacion al hacer clic en el boton */
+async function accionGenerarRotacion() {
+  const fecha = val('rot_fecha');
+  if (!fecha) {
+    toast('Seleccione una fecha para generar la rotacion.', 'warning');
+    return;
+  }
+
+  const estadoEl = $('rot_estado');
+  if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-warning text-dark">Generando...</span>';
+
+  try {
+    /* Leer historial de los ultimos 3 dias desde Drive */
+    if (CONFIG.apiUrl && !CONFIG.modoLocal) {
+      const r = await api('leerRotacionRango', { folderId: CONFIG.folders.rotacion, dias: 3 });
+      if (r && r.ok) {
+        ROTACION_HISTORIAL = r.dias || [];
+      } else {
+        ROTACION_HISTORIAL = [];
+      }
+    } else {
+      ROTACION_HISTORIAL = [];
+    }
+
+    ROTACION_DIA = generarRotacion(fecha, ROTACION_HISTORIAL);
+    pintarAperturaDia();
+
+    if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-success">Rotacion generada (' + ROTACION_DIA.length + ' personas)</span>';
+    toast('Rotacion generada para <strong>' + fecha + '</strong>. Recuerde guardar en Drive.', 'success');
+  } catch (e) {
+    if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-danger">Error</span>';
+    toast('Error al generar rotacion: ' + e.message, 'danger');
+    /* Si falla la API, generar con historial vacio */
+    ROTACION_DIA = generarRotacion(fecha, []);
+    pintarAperturaDia();
+    toast('Rotacion generada sin historial previo (sin restriccion de 3 dias).', 'warning');
+  }
+}
+
+/** Guarda la rotacion generada en Drive via API */
+async function accionGuardarRotacion() {
+  if (!ROTACION_DIA || !ROTACION_DIA.length) {
+    toast('Primero genere la rotacion antes de guardar.', 'warning');
+    return;
+  }
+  const fecha = val('rot_fecha');
+  if (!fecha) {
+    toast('Seleccione la fecha de la rotacion.', 'warning');
+    return;
+  }
+
+  const estadoEl = $('rot_estado');
+  if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-warning text-dark">Guardando en Drive...</span>';
+
+  try {
+    const r = await api('guardarRotacion', {
+      folderId: CONFIG.folders.rotacion,
+      fecha: fecha,
+      asignaciones: ROTACION_DIA
+    });
+    if (r && r.ok) {
+      if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-success">Guardada en Drive</span>';
+      toast('Rotacion guardada en Drive para <strong>' + fecha + '</strong> (' + ROTACION_DIA.length + ' asignaciones).', 'success');
+    } else {
+      if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-danger">Error al guardar</span>';
+      toast('Error al guardar rotacion: ' + (r.error || 'desconocido'), 'danger');
+    }
+  } catch (e) {
+    if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-danger">Error de conexion</span>';
+    toast('Error de conexion al guardar rotacion: ' + e.message, 'danger');
+  }
+}
+
+/** Carga la rotacion existente para una fecha al cambiar el picker */
+async function accionCargarRotacionFecha() {
+  const fecha = val('rot_fecha');
+  if (!fecha) { ROTACION_DIA = null; pintarAperturaDia(); return; }
+
+  if (!CONFIG.apiUrl || CONFIG.modoLocal) {
+    ROTACION_DIA = null;
+    pintarAperturaDia();
+    return;
+  }
+
+  try {
+    const r = await api('leerRotacion', { folderId: CONFIG.folders.rotacion, fecha: fecha });
+    if (r && r.ok && r.asignaciones && r.asignaciones.length) {
+      ROTACION_DIA = r.asignaciones;
+      pintarAperturaDia();
+      const estadoEl = $('rot_estado');
+      if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-info">Rotacion existente cargada (' + r.asignaciones.length + ' personas)</span>';
+    } else {
+      ROTACION_DIA = null;
+      pintarAperturaDia();
+    }
+  } catch (e) {
+    ROTACION_DIA = null;
+    pintarAperturaDia();
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * 8. REFRESCO GENERAL Y EXPORTACION
  * ------------------------------------------------------------------------- */
 function refrescarTodo() {
   const lista = trasladosFiltrados();
@@ -741,9 +1034,9 @@ function refrescarTodo() {
   pintarSeccion2();
   pintarSeccion3();
   pintarSeccion4();
+  pintarAperturaDia();
 }
 
-/** Exporta el consolidado visible a XLSX (una hoja por sección). */
 function exportarConsolidado() {
   const wb = XLSX.utils.book_new();
   const hoja = (nombre, filas) => {
@@ -759,24 +1052,30 @@ function exportarConsolidado() {
     'Tiempo Alistamiento (h)': t.tAlistamiento === null ? '' : Math.round(t.tAlistamiento * 100) / 100,
     'Tiempo Espera Despacho (h)': t.tEsperaDespacho === null ? '' : Math.round(t.tEsperaDespacho * 100) / 100,
     'Tiempo Transito (h)': t.tTransito === null ? '' : Math.round(t.tTransito * 100) / 100,
-    'Tiene Novedad': t.tieneNovedad ? 'SI' : 'NO'
+    'Tiene Novedad': t.tieneNovedad ? 'SI' : 'NO',
+    'Quien Alisto': t.quienAlisto,
+    'Quien Pito': t.quienPito,
+    'Quien Empaco': t.quienEmpaco,
+    'Tipo Carga': t.tipoCarga,
+    'Concepto': t.concepto
   })));
   hoja('RECEPCION TECNICA', recepcionFiltrada());
   hoja('NOVEDADES', FUENTES.novedades);
   hoja('INVENTARIO', inventarioFiltrado());
+  hoja('SEGURIDAD', FUENTES.seguridad);
   const d = new Date(), p = n => String(n).padStart(2, '0');
   XLSX.writeFile(wb, `Consolidado_Visor_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.xlsx`);
 }
 
 /* ---------------------------------------------------------------------------
- * 7.b PLANILLA DE DESPACHOS (descarga XLSX / impresión)
- *     Columnas fijas solicitadas por operación CENDIS - LOGISTICA.
+ * 8.b PLANILLA DE DESPACHOS (descarga XLSX / impresion)
+ *     Columnas enriquecidas con datos de rotacion.
  * ------------------------------------------------------------------------- */
 const COLS_PLANILLA = ['Fecha', 'Bodega Origen', 'Bodega Destino', 'Traslado', 'Cantidad',
-  'Tipo', 'Ruta', 'Fecha de Envío de Traslado', 'Responsable de Envío', 'Placa',
-  'Observación', 'Estado'];
+  'Tipo', 'Ruta', 'Fecha de Envio de Traslado', 'Responsable de Envio', 'Placa',
+  'Observacion', 'Estado', 'Quien Alisto', 'Quien Pito', 'Quien Empaco',
+  'Tipo Carga', 'Concepto'];
 
-/** Normaliza el tipo de empaque a las categorías oficiales. */
 function clasificarTipo(valor) {
   const v = normalizarCabecera(valor);
   if (!v) return '';
@@ -787,7 +1086,6 @@ function clasificarTipo(valor) {
   return String(valor).toUpperCase();
 }
 
-/** Solo la fecha (sin hora) de un texto de fecha. */
 function soloFecha(texto) {
   const d = aFecha(texto);
   if (!d) return String(texto || '');
@@ -795,7 +1093,6 @@ function soloFecha(texto) {
   return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
-/** Arma las filas de la planilla a partir de los traslados filtrados. */
 function filasPlanillaDespachos() {
   return trasladosFiltrados().map(t => ({
     'Fecha': soloFecha(t.fechaInicial),
@@ -805,21 +1102,25 @@ function filasPlanillaDespachos() {
     'Cantidad': obtenerValorPorNombreColumna(t.crudo, A.cantidad),
     'Tipo': clasificarTipo(obtenerValorPorNombreColumna(t.crudo, A.tipo)),
     'Ruta': t.zona,
-    'Fecha de Envío de Traslado': t.fPlanilla || '',
-    'Responsable de Envío': obtenerValorPorNombreColumna(t.crudo, A.conductor),
+    'Fecha de Envio de Traslado': t.fPlanilla || '',
+    'Responsable de Envio': obtenerValorPorNombreColumna(t.crudo, A.conductor),
     'Placa': obtenerValorPorNombreColumna(t.crudo, ['PLACA', 'Placa']),
-    'Observación': obtenerValorPorNombreColumna(t.crudo, A.observaciones),
-    'Estado': t.estado + (esSi(t.urgente) ? ' / URGENTE' : '')
+    'Observacion': obtenerValorPorNombreColumna(t.crudo, A.observaciones),
+    'Estado': t.estado + (esSi(t.urgente) ? ' / URGENTE' : ''),
+    'Quien Alisto': t.quienAlisto,
+    'Quien Pito': t.quienPito,
+    'Quien Empaco': t.quienEmpaco,
+    'Tipo Carga': t.tipoCarga,
+    'Concepto': t.concepto
   }));
 }
 
-/** Descarga la planilla de despachos en XLSX. */
 function descargarPlanillaDespachos() {
   const filas = filasPlanillaDespachos();
   if (!filas.length) { alert('No hay traslados en el filtro actual para generar la planilla.'); return; }
 
   const matriz = [
-    ['OPERACIÓN CENDIS - LOGÍSTICA — PLANILLA DE DESPACHOS'],
+    ['OPERACION CENDIS - LOGISTICA — PLANILLA DE DESPACHOS'],
     ['Generado: ' + new Date().toLocaleString('es-CO'), '', 'Registros: ' + filas.length],
     [],
     COLS_PLANILLA
@@ -828,7 +1129,8 @@ function descargarPlanillaDespachos() {
 
   const ws = XLSX.utils.aoa_to_sheet(matriz);
   ws['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 10 }, { wch: 12 },
-                 { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 10 }, { wch: 34 }, { wch: 18 }];
+                 { wch: 14 }, { wch: 20 }, { wch: 22 }, { wch: 10 }, { wch: 34 }, { wch: 18 },
+                 { wch: 18 }, { wch: 16 }, { wch: 18 }, { wch: 12 }, { wch: 20 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'PLANILLA DESPACHOS');
 
@@ -836,7 +1138,6 @@ function descargarPlanillaDespachos() {
   XLSX.writeFile(wb, `Planilla_Despachos_CENDIS_${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.xlsx`);
 }
 
-/** Genera la vista de impresión de la planilla de despachos. */
 function imprimirPlanillaDespachos() {
   const filas = filasPlanillaDespachos();
   if (!filas.length) { alert('No hay traslados en el filtro actual para imprimir.'); return; }
@@ -844,8 +1145,8 @@ function imprimirPlanillaDespachos() {
   const encabezado = `
     <div style="text-align:center;margin-bottom:10px">
       <img src="assets/logo.jpeg" style="height:52px" alt="Medisfarma">
-      <h3 style="margin:6px 0 0">OPERACIÓN CENDIS - LOGÍSTICA</h3>
-      <div style="font-size:12px">Planilla de Despachos &middot; ${new Date().toLocaleString('es-CO')} &middot; ${filas.length} traslados</div>
+      <h3 style="margin:6px 0 0">OPERACION CENDIS - LOGISTICA</h3>
+      <div style="font-size:12px">Planilla de Despachos · ${new Date().toLocaleString('es-CO')} · ${filas.length} traslados</div>
     </div>`;
 
   const thead = '<thead><tr>' + COLS_PLANILLA.map(c => `<th>${esc(c)}</th>`).join('') + '</tr></thead>';
@@ -853,31 +1154,32 @@ function imprimirPlanillaDespachos() {
     '<tr>' + COLS_PLANILLA.map(c => `<td>${esc(f[c])}</td>`).join('') + '</tr>').join('') + '</tbody>';
 
   $('areaPlanillaImpresion').innerHTML = encabezado + '<table>' + thead + tbody + '</table>' +
-    '<p style="margin-top:18px;font-size:11px">Entrega CENDIS: ____________________ &nbsp;&nbsp; Recibe Logística: ____________________ &nbsp;&nbsp; Conductor: ____________________</p>';
+    '<p style="margin-top:18px;font-size:11px">Entrega CENDIS: ____________________ &nbsp;&nbsp; Recibe Logistica: ____________________ &nbsp;&nbsp; Conductor: ____________________</p>';
 
   window.print();
 }
 
 /* ---------------------------------------------------------------------------
- * 8. INICIALIZACION
+ * 9. INICIALIZACION
  * ------------------------------------------------------------------------- */
 function pintarConfig() {
   $('v_api_url').value = CONFIG.apiUrl || '';
-  ['despachos', 'logistica', 'recepcion', 'novedades', 'inventario', 'facturacion']
+  ['despachos', 'logistica', 'recepcion', 'novedades', 'inventario', 'facturacion', 'seguridad', 'rotacion']
     .forEach(m => { $('v_folder_' + m).value = CONFIG.folders[m] || ''; });
   $('v_modo_local').checked = !!CONFIG.modoLocal;
   pintarPerfilesVisor();
 }
 
-/** Muestra los perfiles de archivos configurados en el modal del Visor. */
 function pintarPerfilesVisor() {
   const perfiles = CONFIG.perfiles || {};
   const LABELS = {
     despachos: 'Despachos (BD_PLANILLA_ENTREGA_DESPACHOS)',
-    logistica: 'Logística (BD_LOGISTICA_DESPACHOS)',
-    recepcion: 'Recepción Técnica (BD_RECEPCION_TECNICA)',
+    logistica: 'Logistica (BD_LOGISTICA_DESPACHOS)',
+    recepcion: 'Recepcion Tecnica (BD_RECEPCION_TECNICA)',
     facturacion: 'Factura Transporte (BD_FACTURA_TRANSPORTE)',
-    inventario: 'Inventario (BD_VERIFICACION_INVENTARIO)'
+    inventario: 'Inventario (BD_VERIFICACION_INVENTARIO)',
+    seguridad: 'Seguridad (BD_SEGURIDAD_DESPACHOS)',
+    rotacion: 'Rotacion Diaria (BD_ROTACION_DIARIA)'
   };
   const cont = $('perfilesInfoVisor');
   if (!cont) return;
@@ -915,7 +1217,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (CONFIG.folders[k] !== undefined && !CONFIG.folders[k]) CONFIG.folders[k] = cfgCargue.folders[k];
       });
     }
-    // Si heredo la URL, guardarla en CONFIG del VISOR
     if (cfgCargue.apiUrl) localStorage.setItem(LS_KEY_VISOR, JSON.stringify(CONFIG));
   } catch (e) {}
 
@@ -934,7 +1235,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('v_guardar').addEventListener('click', () => {
     CONFIG.apiUrl = val('v_api_url');
-    ['despachos', 'logistica', 'recepcion', 'novedades', 'inventario', 'facturacion']
+    ['despachos', 'logistica', 'recepcion', 'novedades', 'inventario', 'facturacion', 'seguridad', 'rotacion']
       .forEach(m => { CONFIG.folders[m] = val('v_folder_' + m); });
     CONFIG.modoLocal = $('v_modo_local').checked;
     localStorage.setItem(LS_KEY_VISOR, JSON.stringify(CONFIG));
@@ -947,6 +1248,17 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnPlanillaDespachos').addEventListener('click', descargarPlanillaDespachos);
   $('btnPlanillaImprimir').addEventListener('click', imprimirPlanillaDespachos);
   $('btnAplicar').addEventListener('click', refrescarTodo);
+
+  // Botones de Apertura del Dia
+  if ($('btnGenerarRotacion')) $('btnGenerarRotacion').addEventListener('click', accionGenerarRotacion);
+  if ($('btnGuardarRotacion')) $('btnGuardarRotacion').addEventListener('click', accionGuardarRotacion);
+  if ($('rot_fecha')) {
+    $('rot_fecha').addEventListener('change', accionCargarRotacionFecha);
+    /* Default: fecha de hoy */
+    const hoyISO = new Date().toISOString().split('T')[0];
+    $('rot_fecha').value = hoyISO;
+  }
+
   $('btnLimpiarFiltros').addEventListener('click', () => {
     ['f_desde', 'f_hasta', 'f_origen', 'f_destino', 'f_zona', 'f_estado', 'f_urgente',
      'f_bodega_inv', 'f_solo_dif', 'buscar_s1', 'buscar_s2', 'buscar_s3', 'buscar_s4', 'buscar_traslado_5']
@@ -964,4 +1276,3 @@ document.addEventListener('DOMContentLoaded', () => {
   // Actualizacion automatica cada 5 minutos cuando hay conexion a Drive.
   setInterval(() => { if (!CONFIG.modoLocal && CONFIG.apiUrl) cargarDatos(); }, 300000);
 });
-
