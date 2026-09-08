@@ -768,13 +768,13 @@ function pintarSeccion4() {
  * ------------------------------------------------------------------------- */
 
 const GRUPOS_FIJOS = [
-  { nombre: 'Fucsia',  numero: 7, color: '#FFD0EC', hex: '#FF00FF', miembros: ['Manuel David Salazar', 'Luz Nelly Chaves', 'Luis Felipe Marin'], lider: 'Luz Nelly Chaves' },
-  { nombre: 'Naranja', numero: 2, color: '#FFDAB9', hex: '#FF8C00', miembros: ['Daniela Noreña', 'Juan David Moreno', 'Kelly Beltran'] },
+  { nombre: 'Rojo',    numero: 1, color: '#FFB3B3', hex: '#dc3545', miembros: ['Nicoll Trivi\u00f1o', 'Estefania Parra', 'Luisa Mar\u00eda Osorio'], lider: 'Luisa Mar\u00eda Osorio' },
+  { nombre: 'Naranja', numero: 2, color: '#FFDAB9', hex: '#FF8C00', miembros: ['Daniela Nore\u00f1a', 'Juan David Moreno', 'Kelly Beltran'] },
+  { nombre: 'Azul',    numero: 3, color: '#B0E0E6', hex: '#0d6efd', miembros: ['Karina Riascos', 'Ana Lorena Ortiz', 'Vaneza Escobar'] },
   { nombre: 'Verde',   numero: 4, color: '#C8F7C5', hex: '#2fb457', miembros: ['Leidy Valencia', 'Bivian Lorena Rivera', 'Brayan Camilo Izquierdo'] },
-  { nombre: 'Rojo',    numero: 1, color: '#FFB3B3', hex: '#dc3545', miembros: ['Nicoll Triviño', 'Estefania Parra', 'Luisa María Osorio'], lider: 'Luisa María Osorio' },
   { nombre: 'Morado',  numero: 5, color: '#D8BFD8', hex: '#6f42c1', miembros: ['Jhony Saenz', 'Natalia Galvez', 'Valentina Cano'] },
   { nombre: 'Amarillo',numero: 6, color: '#FFFACD', hex: '#ffc107', miembros: ['Liz Karime Valencia', 'Angela Vanessa Aguirre', 'Derly Yulieth Mosquera'] },
-  { nombre: 'Azul',    numero: 3, color: '#B0E0E6', hex: '#0d6efd', miembros: ['Karina Riascos', 'Ana Lorena Ortiz', 'Vaneza Escobar'] },
+  { nombre: 'Fucsia',  numero: 7, color: '#FFD0EC', hex: '#FF00FF', miembros: ['Manuel David Salazar', 'Luz Nelly Chaves', 'Luis Felipe Marin'], lider: 'Luz Nelly Chaves' },
   { nombre: 'Gris',    numero: 8, color: '#E0E0E0', hex: '#6c757d', miembros: ['Claudia Echeverry', 'Camila Posada', 'Angela Vera', 'Mayra Alejandra Franco', 'Andrea Vanegas'], lider: 'Andrea Vanegas' }
 ];
 
