@@ -58,8 +58,7 @@ let CONFIG = cargarConfigVisor();
 let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [] };
 let TRASLADOS = [];    // consolidado calculado
 let CHARTS = {};
-let ROTACION_DIA = null; // asignaciones del dia seleccionado
-let ROTACION_HISTORIAL = []; // ultimos 3 dias para restriccion
+// Los grupos son fijos — no se necesita ROTACION_DIA ni historial
 
 /* ---------------------------------------------------------------------------
  * 0. CREDENCIALES DE USUARIO (LOGIN)
@@ -761,125 +760,45 @@ function pintarSeccion4() {
 }
 
 /* ---------------------------------------------------------------------------
- * 7. APERTURA DEL DIA — ROTACION POR GRUPOS FIJOS (TRIADAS)
- *    7 trios con rotacion ciclica interna + Grupo Especial Gris (TB5)
+ * 7. APERTURA DEL DIA — 8 GRUPOS FIJOS
+ *    8 grupos fijos con miembros definidos. Sin rotacion ciclica.
+ *    Cada grupo muestra: nombre del color + lista de miembros.
+ *    Grupo Gris = especial (5 miembros, asignado a B05 ALTO COSTO).
+ *    Los otros 7 trios = asignados a CENDIS PRINCIPAL TULUA PARQUE INDUSTRIAL.
  * ------------------------------------------------------------------------- */
 
-const GRUPOS_ROTACION = {
-  'Verde Menta': { color: '#98FB98', hex: '#3eb489', miembros: ['Manuel David Salazar', 'Luz Nelly Chaves', 'Luis Felipe Marin'] },
-  'Naranja':      { color: '#FFDAB9', hex: '#FF8C00', miembros: ['Daniela Noreña', 'Juan David Moreno', 'Kelly Beltran'] },
-  'Verde':        { color: '#C8F7C5', hex: '#2fb457', miembros: ['Leidy Valencia', 'Bivian Lorena Rivera', 'Brayan Camilo Izquierdo'] },
-  'Rojo':         { color: '#FFB3B3', hex: '#dc3545', miembros: ['Nicoll Triviño', 'Estefania Parra', 'Luisa María Osorio'] },
-  'Morado':       { color: '#D8BFD8', hex: '#6f42c1', miembros: ['Jhony Saenz', 'Natalia Galvez', 'Valentina Cano'] },
-  'Amarillo':     { color: '#FFFACD', hex: '#ffc107', miembros: ['Liz Karime Valencia', 'Angela Vanessa Aguirre', 'Derly Yulieth Mosquera'] },
-  'Azul':         { color: '#B0E0E6', hex: '#0d6efd', miembros: ['Karina Riascos', 'Ana Lorena Ortiz', 'Vaneza Escobar'] }
-};
+const GRUPOS_FIJOS = [
+  { nombre: 'Fucsia',  color: '#FFD0EC', hex: '#FF00FF', miembros: ['Manuel David Salazar', 'Luz Nelly Chaves', 'Luis Felipe Marin'] },
+  { nombre: 'Naranja', color: '#FFDAB9', hex: '#FF8C00', miembros: ['Daniela Noreña', 'Juan David Moreno', 'Kelly Beltran'] },
+  { nombre: 'Verde',   color: '#C8F7C5', hex: '#2fb457', miembros: ['Leidy Valencia', 'Bivian Lorena Rivera', 'Brayan Camilo Izquierdo'] },
+  { nombre: 'Rojo',    color: '#FFB3B3', hex: '#dc3545', miembros: ['Nicoll Triviño', 'Estefania Parra', 'Luisa María Osorio'] },
+  { nombre: 'Morado',  color: '#D8BFD8', hex: '#6f42c1', miembros: ['Jhony Saenz', 'Natalia Galvez', 'Valentina Cano'] },
+  { nombre: 'Amarillo',color: '#FFFACD', hex: '#ffc107', miembros: ['Liz Karime Valencia', 'Angela Vanessa Aguirre', 'Derly Yulieth Mosquera'] },
+  { nombre: 'Azul',    color: '#B0E0E6', hex: '#0d6efd', miembros: ['Karina Riascos', 'Ana Lorena Ortiz', 'Vaneza Escobar'] },
+  { nombre: 'Gris',    color: '#E0E0E0', hex: '#6c757d', miembros: ['Claudia Echeverry', 'Camila Posada', 'Angela Vera', 'Mayra Alejandra Franco', 'Andrea Vanegas'] }
+];
 
-const GRUPO_ESPECIAL_TB5 = {
-  nombre: 'Gris',
-  color: '#D3D3D3',
-  hex: '#6c757d',
-  miembros: ['Claudia Echeverry', 'Camila Posada', 'Angela Vera', 'Mayra Alejandra Franco', 'Andrea Vanegas'],
-  esTB5: true
-};
-
-const ROLES_ROTACION = ['Alistar', 'Pitar', 'Empacar'];
-
-/**
- * Genera la rotacion del dia basada en trios con rotacion ciclica.
- * - Cada trio rola internamente: Dia 1: Alista/Pita/Empaca, Dia 2 rotan, Dia 3 rol restante.
- * - Dia 4 (n+3) reinicia el ciclo.
- * - El Grupo Especial Gris (TB5) tiene asignacion fija (los 3 roles para TB5*).
- *
- * @param {string} fecha - Fecha ISO (yyyy-mm-dd)
- * @param {Array} historial - No usado en logica de trios, conservado para compatibilidad
- * @returns {Array} asignaciones: [{ nombre, rol, grupo }]
- */
-function generarRotacion(fecha, historial) {
-  const resultado = [];
-
-  // Calcular el dia del ciclo (1-3) basado en fecha
-  const d = new Date(fecha + 'T12:00:00');
-  // Contar dias desde una referencia (1 ene 2024 = lunes) — usamos Math.floor para ciclo de 3
-  const epochMs = d.getTime();
-  const epochDays = Math.floor(epochMs / 86400000);
-  const cicloDia = ((epochDays % 3) + 3) % 3; // 0, 1, 2
-  // Mapeo: cicloDia 0 = Dia 1 (base), cicloDia 1 = Dia 2 (rotan 1 posicion), cicloDia 2 = Dia 3 (rotan 2 posiciones)
-
-  const roles = ROLES_ROTACION; // ['Alistar', 'Pitar', 'Empacar']
-
-  // Generar asignaciones para cada trio estandar
-  Object.keys(GRUPOS_ROTACION).forEach(nombreGrupo => {
-    const grupo = GRUPOS_ROTACION[nombreGrupo];
-    const miembros = grupo.miembros; // 3 personas
-
-    miembros.forEach((persona, idxBase) => {
-      // Indice de rol para esta persona hoy
-      const idxRol = (idxBase + cicloDia) % 3;
-      resultado.push({
-        nombre: persona,
-        rol: roles[idxRol],
-        grupo: nombreGrupo
-      });
-    });
-  });
-
-  // Generar asignaciones para Grupo Especial TB5 (fijo, los 3 roles)
-  GRUPO_ESPECIAL_TB5.miembros.forEach(persona => {
-    roles.forEach(rol => {
-      resultado.push({
-        nombre: persona,
-        rol: rol,
-        grupo: 'Gris (TB5)'
-      });
-    });
-  });
-
-  return resultado;
+/** Genera la lista de grupos del dia (fija, sin rotacion). */
+function generarGruposDelDia() {
+  return GRUPOS_FIJOS.map(g => ({
+    nombre: g.nombre,
+    miembros: g.miembros.slice()
+  }));
 }
 
-/** Pinta los trios de rotacion y el grupo especial TB5 en el panel de Apertura del Dia */
+/** Pinta los 8 grupos fijos en el panel de Apertura del Dia */
 function pintarAperturaDia() {
-  const contTrios = $('rot_trios_container');
-  const contGris = $('rot_miembros_gris');
+  const cont = $('rot_grupos_container');
   const info = $('info_rotacion');
-  const asignaciones = ROTACION_DIA || [];
 
-  // Pintar Grupo Especial Gris (TB5)
-  if (contGris) {
-    contGris.innerHTML = '';
-    const miembrosTB5 = asignaciones.filter(a => a.grupo === 'Gris (TB5)');
-    if (miembrosTB5.length) {
-      const personasUnicas = GRUPO_ESPECIAL_TB5.miembros;
-      personasUnicas.forEach(nombre => {
-        const badge = document.createElement('span');
-        badge.className = 'rot-miembro-badge rot-grupo-gris-badge';
-        badge.innerHTML = '<strong>' + esc(nombre) + '</strong> <span class="text-muted small">(Alista, Pita, Empaca)</span>';
-        contGris.appendChild(badge);
-      });
-    } else {
-      GRUPO_ESPECIAL_TB5.miembros.forEach(nombre => {
-        const badge = document.createElement('span');
-        badge.className = 'rot-miembro-badge rot-grupo-gris-badge';
-        badge.innerHTML = '<strong>' + esc(nombre) + '</strong> <span class="text-muted small">(Alista, Pita, Empaca)</span>';
-        contGris.appendChild(badge);
-      });
-    }
-  }
-
-  // Pintar cada trio estandar
-  if (contTrios) {
-    contTrios.innerHTML = '';
-    const nombresGrupos = Object.keys(GRUPOS_ROTACION);
+  if (cont) {
+    cont.innerHTML = '';
     let idxCol = 0;
-    const cols = ['col-md-4', 'col-md-4', 'col-md-4'];
+    const cols = ['col-md-3', 'col-md-3', 'col-md-3', 'col-md-3'];
 
-    nombresGrupos.forEach(nombreGrupo => {
-      const grupo = GRUPOS_ROTACION[nombreGrupo];
-      const miembrosAsignados = asignaciones.filter(a => a.grupo === nombreGrupo);
-
+    GRUPOS_FIJOS.forEach(grupo => {
       const col = document.createElement('div');
-      col.className = cols[idxCol % 3];
+      col.className = cols[idxCol % 4];
 
       const card = document.createElement('div');
       card.className = 'rot-grupo-card';
@@ -889,150 +808,85 @@ function pintarAperturaDia() {
       const header = document.createElement('div');
       header.className = 'rot-grupo-card-header';
       header.style.background = grupo.hex;
-      header.style.color = ['#ffc107', '#FFDAB9', '#FFFACD'].includes(grupo.color) ? '#000' : '#fff';
-      header.innerHTML = '&#11044; ' + esc(nombreGrupo);
+      const lightColors = ['#FFD0EC', '#FFDAB9', '#C8F7C5', '#FFB3B3', '#D8BFD8', '#FFFACD', '#B0E0E6', '#E0E0E0'];
+      header.style.color = lightColors.includes(grupo.color) ? (grupo.hex === '#ffc107' ? '#000' : '#fff') : '#fff';
+      // Mejor contraste: si el hex es claro, usar texto oscuro
+      const isLightHex = ['#ffc107', '#FF8C00'].some(c => grupo.hex === c);
+      header.style.color = isLightHex ? '#000' : '#fff';
+      header.innerHTML = '&#11044; ' + esc(grupo.nombre);
       card.appendChild(header);
 
       const body = document.createElement('div');
       body.className = 'rot-grupo-card-body';
 
-      if (miembrosAsignados.length) {
-        miembrosAsignados.forEach(a => {
-          const row = document.createElement('div');
-          row.className = 'rot-grupo-miembro';
-          const rolColor = a.rol === 'Alistar' ? '#2fb457' : (a.rol === 'Pitar' ? '#0d6efd' : '#ffc107');
-          const rolTextColor = a.rol === 'Empacar' ? '#000' : '#fff';
-          row.innerHTML = '<span class="rot-rol-badge" style="background:' + rolColor + ';color:' + rolTextColor + '">' + esc(a.rol) + '</span> ' + esc(a.nombre);
-          body.appendChild(row);
-        });
-      } else {
-        // Sin datos: mostrar trio sin asignar
-        grupo.miembros.forEach((nombre, idx) => {
-          const row = document.createElement('div');
-          row.className = 'rot-grupo-miembro text-muted';
-          row.textContent = nombre;
-          body.appendChild(row);
-        });
-      }
+      grupo.miembros.forEach(nombre => {
+        const row = document.createElement('div');
+        row.className = 'rot-grupo-miembro';
+        row.textContent = nombre;
+        body.appendChild(row);
+      });
 
       card.appendChild(body);
       col.appendChild(card);
-      contTrios.appendChild(col);
+      cont.appendChild(col);
       idxCol++;
     });
   }
 
   /* Info banner */
   if (info) {
-    const totalStd = Object.values(GRUPOS_ROTACION).reduce((s, g) => s + g.miembros.length, 0);
-    const totalTB5 = GRUPO_ESPECIAL_TB5.miembros.length;
-    if (asignaciones.length) {
-      info.innerHTML = '<span class="badge bg-success">7 trios + TB5 (' + totalStd + ' personas en trios, ' + totalTB5 + ' en TB5)</span>';
-    } else {
-      info.innerHTML = '<span class="badge bg-secondary">Sin rotacion generada</span>';
-    }
+    const total = GRUPOS_FIJOS.reduce((s, g) => s + g.miembros.length, 0);
+    info.innerHTML = '<span class="badge bg-success">8 grupos fijos &mdash; ' + total + ' personas</span>';
   }
 }
 
-/** Genera la rotacion al hacer clic en el boton */
-async function accionGenerarRotacion() {
-  const fecha = val('rot_fecha');
-  if (!fecha) {
-    toast('Seleccione una fecha para generar la rotacion.', 'warning');
-    return;
-  }
+/** Los grupos son fijos — no se necesita generar rotacion */
 
-  const estadoEl = $('rot_estado');
-  if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-warning text-dark">Generando...</span>';
-
-  try {
-    /* Leer historial de los ultimos 3 dias desde Drive */
-    if (CONFIG.apiUrl && !CONFIG.modoLocal) {
-      const r = await api('leerRotacionRango', { folderId: CONFIG.folders.rotacion, dias: 3 });
-      if (r && r.ok) {
-        ROTACION_HISTORIAL = r.dias || [];
-      } else {
-        ROTACION_HISTORIAL = [];
-      }
-    } else {
-      ROTACION_HISTORIAL = [];
-    }
-
-    ROTACION_DIA = generarRotacion(fecha, ROTACION_HISTORIAL);
-    pintarAperturaDia();
-
-    if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-success">Rotacion generada (' + ROTACION_DIA.length + ' personas)</span>';
-    toast('Rotacion generada para <strong>' + fecha + '</strong>. Recuerde guardar en Drive.', 'success');
-  } catch (e) {
-    if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-danger">Error</span>';
-    toast('Error al generar rotacion: ' + e.message, 'danger');
-    /* Si falla la API, generar con historial vacio */
-    ROTACION_DIA = generarRotacion(fecha, []);
-    pintarAperturaDia();
-    toast('Rotacion generada sin historial previo (sin restriccion de 3 dias).', 'warning');
-  }
-}
-
-/** Guarda la rotacion generada en Drive via API */
+/** Guarda los grupos fijos del dia en Drive via API */
 async function accionGuardarRotacion() {
-  if (!ROTACION_DIA || !ROTACION_DIA.length) {
-    toast('Primero genere la rotacion antes de guardar.', 'warning');
-    return;
-  }
   const fecha = val('rot_fecha');
   if (!fecha) {
-    toast('Seleccione la fecha de la rotacion.', 'warning');
+    toast('Seleccione la fecha de la Apertura.', 'warning');
     return;
   }
 
   const estadoEl = $('rot_estado');
   if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-warning text-dark">Guardando en Drive...</span>';
 
+  // Construir asignaciones a partir de los grupos fijos
+  const asignaciones = [];
+  GRUPOS_FIJOS.forEach(g => {
+    g.miembros.forEach(nombre => {
+      asignaciones.push({ nombre: nombre, grupo: g.nombre });
+    });
+  });
+
   try {
     const r = await api('guardarRotacion', {
       folderId: CONFIG.folders.rotacion,
       fecha: fecha,
-      asignaciones: ROTACION_DIA
+      asignaciones: asignaciones
     });
     if (r && r.ok) {
       if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-success">Guardada en Drive</span>';
-      toast('Rotacion guardada en Drive para <strong>' + fecha + '</strong> (' + ROTACION_DIA.length + ' asignaciones).', 'success');
+      toast('Grupos guardados en Drive para <strong>' + fecha + '</strong> (' + asignaciones.length + ' personas).', 'success');
     } else {
       if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-danger">Error al guardar</span>';
-      toast('Error al guardar rotacion: ' + (r.error || 'desconocido'), 'danger');
+      toast('Error al guardar grupos: ' + (r.error || 'desconocido'), 'danger');
     }
   } catch (e) {
     if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-danger">Error de conexion</span>';
-    toast('Error de conexion al guardar rotacion: ' + e.message, 'danger');
+    toast('Error de conexion al guardar grupos: ' + e.message, 'danger');
   }
 }
 
-/** Carga la rotacion existente para una fecha al cambiar el picker */
+/** Los grupos son fijos — al cambiar fecha solo actualiza la visualizacion */
 async function accionCargarRotacionFecha() {
   const fecha = val('rot_fecha');
-  if (!fecha) { ROTACION_DIA = null; pintarAperturaDia(); return; }
-
-  if (!CONFIG.apiUrl || CONFIG.modoLocal) {
-    ROTACION_DIA = null;
-    pintarAperturaDia();
-    return;
-  }
-
-  try {
-    const r = await api('leerRotacion', { folderId: CONFIG.folders.rotacion, fecha: fecha });
-    if (r && r.ok && r.asignaciones && r.asignaciones.length) {
-      ROTACION_DIA = r.asignaciones;
-      pintarAperturaDia();
-      const estadoEl = $('rot_estado');
-      if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-info">Rotacion existente cargada (' + r.asignaciones.length + ' personas)</span>';
-    } else {
-      ROTACION_DIA = null;
-      pintarAperturaDia();
-    }
-  } catch (e) {
-    ROTACION_DIA = null;
-    pintarAperturaDia();
-  }
+  if (!fecha) { pintarAperturaDia(); return; }
+  const estadoEl = $('rot_estado');
+  if (estadoEl) estadoEl.innerHTML = '<span class="badge bg-info">Grupos fijos del dia</span>';
+  pintarAperturaDia();
 }
 
 /* ---------- SECCION 5: LOGISTICA Y DESPACHO ---------- */
@@ -1364,7 +1218,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if ($('btnExportarLogistica')) $('btnExportarLogistica').addEventListener('click', exportarLogistica);
 
   // Botones de Apertura del Dia
-  if ($('btnGenerarRotacion')) $('btnGenerarRotacion').addEventListener('click', accionGenerarRotacion);
   if ($('btnGuardarRotacion')) $('btnGuardarRotacion').addEventListener('click', accionGuardarRotacion);
   if ($('rot_fecha')) {
     $('rot_fecha').addEventListener('change', accionCargarRotacionFecha);
