@@ -230,36 +230,23 @@
     </div>
   </div>
 
-  <!-- ============================ APERTURA DEL DIA — Rotacion por Grupos Fijos (Triadas) ============================ -->
+  <!-- ============================ APERTURA DEL DIA — 8 Grupos Fijos ============================ -->
   <div class="mf-panel mf-apertura-dia mb-3">
     <div class="mf-panel-header d-flex justify-content-between align-items-center">
-      <span>&#128337; APERTURA DEL DIA &mdash; Rotacion por Grupos Fijos (Triadas)</span>
+      <span>&#128337; APERTURA DEL DIA &mdash; Grupos de Operaci&oacute;n</span>
       <span class="d-flex align-items-center gap-2">
         <span class="small text-muted" id="info_rotacion"></span>
-        <button class="btn btn-sm btn-warning" id="btnGenerarRotacion">&#127922; Generar Rotacion</button>
         <button class="btn btn-sm btn-success" id="btnGuardarRotacion">&#128190; Guardar en Drive</button>
       </span>
     </div>
     <div class="mf-panel-body">
-      <div class="alert alert-info py-2 small mb-2">
-        <strong>Regla:</strong> 7 trios rotan internamente en 3 roles (Alistar, Pitar, Empacar). Dentro de cada trio, los miembros
-        ciclan roles cada dia (Dia 1: Alista/Pita/Empaca, Dia 2 rotan, Dia 3 rol restante, Dia 4 reinicia).
-        El <strong>Grupo Especial Gris (TB5)</strong> tiene asignacion fija para los 3 roles en traslados que comienzan con TB5.
-      </div>
       <div class="row g-2 mb-2">
         <div class="col-md-3"><label class="form-label small fw-bold">Fecha de la Apertura</label>
           <input type="date" class="form-control form-control-sm" id="rot_fecha"></div>
         <div class="col-md-9"><span id="rot_estado" class="mf-estado"></span></div>
       </div>
-      <!-- Grupo Especial Gris (TB5) -->
-      <div class="rot-grupo rot-grupo-gris mb-2" id="rot_grupo_gris">
-        <div class="rot-grupo-header bg-secondary text-white">
-          <strong>&#128308; GRUPO ESPECIAL GRIS (TB5)</strong> &mdash; Asignacion fija, todos los roles
-        </div>
-        <div class="rot-grupo-body d-flex flex-wrap gap-2" id="rot_miembros_gris"></div>
-      </div>
-      <!-- 7 Trios codificados por color -->
-      <div class="row g-2" id="rot_trios_container"></div>
+      <!-- 8 Grupos Fijos codificados por color -->
+      <div class="row g-2" id="rot_grupos_container"></div>
     </div>
   </div>
 
