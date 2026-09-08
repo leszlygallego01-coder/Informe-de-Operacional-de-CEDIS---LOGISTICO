@@ -11,6 +11,7 @@
   --mf-borde: #dbe4f0;
   --mf-rojo: #dc3545;
   --mf-ambar: #ffc107;
+  --mf-fucsia: #FF00FF;
 }
 
 body { background: var(--mf-gris); font-family: "Segoe UI", Roboto, Arial, sans-serif; color: #1f2d3d; margin: 0; padding: 0; }
@@ -261,7 +262,7 @@ body.mf-login-activo {
   gap: 8px;
 }
 
-/* Grupo Especial Gris (TB5) */
+/* Grupo Especial Gris */
 .rot-grupo-gris {
   border: 2px solid #6c757d;
   border-radius: 12px;
