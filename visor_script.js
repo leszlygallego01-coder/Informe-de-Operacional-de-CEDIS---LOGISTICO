@@ -10,7 +10,7 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyvZDjnPRUnLJkRjHENBvXj_3n6ogDj-du_Kul47OgpoxVH8PAhqGIkjtb2s1uTbO5P/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwVZ2pOWf64TCY7BD7aK69C5-aL4l6cpfGlKEqrblTcYReC80SEF2cn1Dlf5kxK32Od/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
