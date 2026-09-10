@@ -10,7 +10,7 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwmDWjkVLHY4tI9voxh5MnaMJGxr8ibzuf9WnTy1oY0FPj78uDYq8Ct7p_Mn7hKlQOW/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxFRZ9X19FDTDifXadndOvdHKuLQ9DBN4Nk4iuIojMeY5uwos161_8qmZ7s3h6bQVyw/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -68,10 +68,10 @@ let CHARTS = {};
  * ------------------------------------------------------------------------- */
 const CREDENCIALES_VISOR = {
   administrador:       'Medis2024Admin',
-  lider:              'Medis2024Lider',
-  auxiliar_entrega:   'Medis2024Aux',
-  recibido_logistica: 'Medis2024Recib',
-  planillar_logistica:'Medis2024Plan'
+  log_diego:           'Medis2024DiegoL',
+  log_angelica:        'Medis2024AngelicaL',
+  log_lorena:          'Medis2024LorenaL',
+  log_jenny:           'Medis2024JennyL'
 };
 const LS_LOGIN_VISOR = 'MF_LOGIN_OK';
 const LS_PERFIL_VISOR = 'MF_PERFIL_ACTIVO';
@@ -113,10 +113,10 @@ function cerrarSesionVisor() {
 
 const PERFILES_LABEL = {
   administrador: 'ADMINISTRADOR',
-  lider: 'LIDER',
-  auxiliar_entrega: 'AUXILIAR ENTREGA',
-  recibido_logistica: 'RECIBIDO LOGISTICA',
-  planillar_logistica: 'PLANILLAR LOGISTICA'
+  log_diego: 'Diego (Logistica CENDIS)',
+  log_angelica: 'Angelica (Logistica CENDIS)',
+  log_lorena: 'Lorena (Logistica CENDIS)',
+  log_jenny: 'Jenny (Logistica CENDIS)'
 };
 
 /* ---------------------------------------------------------------------------
