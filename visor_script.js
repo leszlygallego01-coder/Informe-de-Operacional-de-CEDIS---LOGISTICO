@@ -10,7 +10,7 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxDTJvYyQApFD1aCPkmNX-jxjw6hhGw9kMJyCv_FDpoKS_klRfY3dKFSKcQVQlYVA-i/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyOi9oPz670eOfTZpcYba5FgOA-gnagMAA_bckI0xR2LIzIVN2S5XGCP5KHmtjubSeu/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -296,25 +296,56 @@ function zonaDeBodega(nombreBodega) {
  * ------------------------------------------------------------------------- */
 async function api(action, payload = {}) {
   if (!CONFIG.apiUrl) throw new Error('No se ha configurado la URL de la Web App.');
+  const fullPayload = Object.assign({ action }, payload);
   try {
+    // INTENTO 1: POST con text/plain (evita preflight CORS)
     const res = await fetch(CONFIG.apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({ action }, payload))
+      redirect: 'follow',
+      body: JSON.stringify(fullPayload)
     });
     const ct = res.headers.get('Content-Type') || '';
     if (ct.includes('text/html')) {
-      throw new Error('La Web App requiere autenticacion. Redespliegue con acceso "Cualquier usuario" (publico).');
+      throw new Error('AUTH_REQUIRED');
     }
     const data = await res.json();
     if (data.ok === false) throw new Error(data.error || 'Error del backend');
     return data;
   } catch (e) {
-    if (e.message && e.message.includes('Failed to fetch')) {
-      throw new Error('No se pudo conectar a la Web App. Verifique: 1) La URL es correcta, 2) La Web App esta desplegada como "Cualquier usuario" (acceso publico), 3) No hay redireccion a login de Google.');
+    // Auth redirect — no reintentar
+    if (e.message === 'AUTH_REQUIRED') {
+      throw new Error('La Web App requiere autenticacion. Desplieguela con acceso "Cualquier usuario" (publico).');
+    }
+    // Network error — reintentar con GET
+    if (e.message && (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))) {
+      console.log('[api] POST fallo, reintentando con GET...');
+      try {
+        return await apiGetFallback(fullPayload);
+      } catch (e2) {
+        throw new Error('No se pudo conectar a la Web App (POST y GET fallaron). Verifique: 1) La URL es correcta, 2) La Web App esta desplegada como "Cualquier usuario" (acceso publico), 3) No hay redireccion a login de Google.');
+      }
     }
     throw e;
   }
+}
+
+async function apiGetFallback(payload) {
+  const params = [];
+  for (const key in payload) {
+    if (payload.hasOwnProperty(key)) {
+      params.push(encodeURIComponent(key) + '=' + encodeURIComponent(typeof payload[key] === 'object' ? JSON.stringify(payload[key]) : payload[key]));
+    }
+  }
+  const getUrl = CONFIG.apiUrl + (CONFIG.apiUrl.includes('?') ? '&' : '?') + params.join('&') + '&_t=' + Date.now();
+  const res = await fetch(getUrl, { method: 'GET', redirect: 'follow' });
+  const ct = res.headers.get('Content-Type') || '';
+  if (ct.includes('text/html')) {
+    throw new Error('AUTH_REQUIRED');
+  }
+  const data = await res.json();
+  if (data.ok === false) throw new Error(data.error || 'Error del backend');
+  return data;
 }
 
 async function cargarDatos() {
@@ -379,17 +410,49 @@ async function probarConexion() {
   if (btn) { btn.disabled = true; btn.innerHTML = '&#8987; Probando...'; }
   badge.className = 'badge bg-warning text-dark';
   badge.textContent = 'Probando conexion...';
+
+  // Primero probar con GET directo (mas confiable para CORS con Apps Script)
+  try {
+    const pingUrl = CONFIG.apiUrl + '?action=ping&_t=' + Date.now();
+    const res = await fetch(pingUrl, { method: 'GET', redirect: 'follow' });
+    const ct = res.headers.get('Content-Type') || '';
+    if (ct.includes('text/html')) {
+      badge.className = 'badge bg-danger';
+      badge.textContent = 'Sin acceso';
+      toast('<strong>Error de autenticacion:</strong> La Web App esta desplegada con acceso restringido.<br>' +
+        '<em>Solucion:</em> En Apps Script vaya a <strong>Implementar > Nueva implementacion > Web app</strong><br>' +
+        'y cambie <strong>"Quien tiene acceso"</strong> a <strong>"Cualquier usuario"</strong> (publico).', 'danger');
+      if (btn) { btn.disabled = false; btn.innerHTML = '&#127760; Probar Conexion'; }
+      return;
+    }
+    const data = await res.json();
+    if (data && data.ok) {
+      badge.className = 'badge bg-success';
+      badge.textContent = 'Conectado a Drive';
+      toast('Conexion exitosa con Google Drive', 'success');
+      if (btn) { btn.disabled = false; btn.innerHTML = '&#127760; Probar Conexion'; }
+      return;
+    }
+  } catch (getErr) {
+    console.log('[probarConexion] GET fallo, probando POST...', getErr);
+  }
+
+  // Fallback: probar con POST via api()
   try {
     await api('ping');
     badge.className = 'badge bg-success';
     badge.textContent = 'Conectado a Drive';
-    toast('Conexion exitosa con Google Drive', 'success');
+    toast('Conexion exitosa via POST.', 'success');
   } catch (e) {
     badge.className = 'badge bg-danger';
     badge.textContent = 'Sin conexion';
     let msg = e.message || 'Error desconocido';
     if (msg.includes('Failed to fetch') || msg.includes('No se pudo conectar')) {
-      msg = 'La Web App requiere acceso publico. Vaya a Apps Script > Implementar > Nueva implementacion > Quien tiene acceso: Cualquier usuario.';
+      msg = '<strong>No se pudo conectar.</strong> Posibles causas:<br>' +
+        '1. <strong>Acceso restringido:</strong> Despliegue la Web App con "Quien tiene acceso: Cualquier usuario"<br>' +
+        '2. <strong>URL incorrecta:</strong> Verifique que la URL sea del despliegue actual<br>' +
+        '3. <strong>CORS:</strong> Abra la URL directamente en el navegador para verificarla<br>' +
+        '4. <strong>Bloqueador:</strong> Desactive extensiones como AdBlocker';
     }
     toast('Error: ' + msg, 'danger');
     console.error('Prueba de conexion fallida:', e);
