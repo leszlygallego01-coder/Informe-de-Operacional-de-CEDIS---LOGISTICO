@@ -16,7 +16,8 @@ const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
   modoLocal: false,
   folders: {
-    despachos:   '1u30YFhTsocLuUoFrVUnb6Fk9zwVsT_E_',
+    despachos:   '1tUXm2FVVFWBnyeBrzTlRpobYTKxk7OH8',
+    trasladosConsulta: '1u30YFhTsocLuUoFrVUnb6Fk9zwVsT_E_',
     logistica:   '1_e8ycbznm0jA4kOBwkJuXM4EVdcwXzYe',
     recepcion:   '1u5aQURkwKw4CqxejzOSxYgeF6dvcj-T0',
     novedades:   '1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-',
@@ -28,6 +29,7 @@ const VISOR_DEFAULTS = {
   },
   perfiles: {
     despachos:   { file: 'BD_PLANILLA_ENTREGA_DESPACHOS', sheet: 'DATOS' },
+    trasladosConsulta: { multiFile: true, label: 'Traslados (carpeta multi-archivo)' },
     logistica:   { file: 'BD_LOGISTICA_DESPACHOS',         sheet: 'DATOS' },
     recepcion:   { file: 'BD_RECEPCION_TECNICA',           sheet: 'DATOS' },
     facturacion: { file: 'BD_FACTURA_TRANSPORTE',         sheet: 'DATOS' },
@@ -48,6 +50,7 @@ function cargarConfigVisor() {
     /* Asegurar carpetas nuevas */
     if (!cfg.folders.seguridad) cfg.folders.seguridad = VISOR_DEFAULTS.folders.seguridad;
     if (!cfg.folders.rotacion) cfg.folders.rotacion = VISOR_DEFAULTS.folders.rotacion;
+    if (!cfg.folders.trasladosConsulta) cfg.folders.trasladosConsulta = VISOR_DEFAULTS.folders.trasladosConsulta;
     return cfg;
   } catch (e) { return Object.assign({}, VISOR_DEFAULTS); }
 }
@@ -55,7 +58,7 @@ function cargarConfigVisor() {
 let CONFIG = cargarConfigVisor();
 
 /** Datos crudos por fuente y datos derivados. */
-let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [] };
+let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [], trasladosConsulta: [] };
 let TRASLADOS = [];    // consolidado calculado
 let CHARTS = {};
 // Los grupos son fijos — no se necesita ROTACION_DIA ni historial
@@ -324,7 +327,8 @@ async function cargarDatos() {
       despachos: local.despachos || [], logistica: local.logistica || [],
       recepcion: local.recepcion || [], novedades: local.novedades || [],
       inventario: local.inventario || [], facturacion: local.facturacion || [],
-      seguridad: local.seguridad || [], rotacion: local.rotacion || []
+      seguridad: local.seguridad || [], rotacion: local.rotacion || [],
+      trasladosConsulta: local.trasladosConsulta || []
     };
     $('estadoApi').className = 'badge bg-warning text-dark';
     $('estadoApi').textContent = 'Sin URL de Web App';
@@ -335,7 +339,8 @@ async function cargarDatos() {
       despachos: local.despachos || [], logistica: local.logistica || [],
       recepcion: local.recepcion || [], novedades: local.novedades || [],
       inventario: local.inventario || [], facturacion: local.facturacion || [],
-      seguridad: local.seguridad || [], rotacion: local.rotacion || []
+      seguridad: local.seguridad || [], rotacion: local.rotacion || [],
+      trasladosConsulta: local.trasladosConsulta || []
     };
     $('estadoApi').className = 'badge bg-secondary';
     $('estadoApi').textContent = 'Modo local';
@@ -356,7 +361,8 @@ async function cargarDatos() {
         despachos: local.despachos || [], logistica: local.logistica || [],
         recepcion: local.recepcion || [], novedades: local.novedades || [],
         inventario: local.inventario || [], facturacion: local.facturacion || [],
-        seguridad: local.seguridad || [], rotacion: local.rotacion || []
+        seguridad: local.seguridad || [], rotacion: local.rotacion || [],
+        trasladosConsulta: local.trasladosConsulta || []
       };
       console.warn(e);
     }
