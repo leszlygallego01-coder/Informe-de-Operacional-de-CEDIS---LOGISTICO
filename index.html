@@ -16,6 +16,9 @@
   </script>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Tom Select: dropdown buscable -->
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="visor_styles.css">
@@ -34,46 +37,54 @@
       <div class="mf-login-error" id="loginErrorVisor">Usuario o contrasena incorrectos</div>
       <div class="mb-3">
         <label for="loginUsuarioVisor">Usuario / Perfil</label>
-        <select class="form-select" id="loginUsuarioVisor">
+        <select class="form-select" id="loginUsuarioVisor" placeholder="Buscar o seleccionar perfil...">
           <option value="">Seleccione su perfil...</option>
           <option value="administrador">&#128081; Administrador</option>
-          <option value="lider">&#128104;&#8205;&#128188; Lider</option>
-          <option value="auxiliar_entrega">&#128230; Auxiliar Entrega</option>
-          <option value="recibido_logistica">&#9989; Recibido Logistica</option>
-          <option value="planillar_logistica">&#128203; Planillar Logistica</option>
-          <option disabled>────────── AUXILIARES ──────────</option>
-          <option value="yuri">&#128119; Yuri</option>
-          <option value="julio">&#128119; Julio</option>
-          <option value="hernan">&#128119; Hernan</option>
-          <option value="diego">&#128119; Diego</option>
-          <option value="brian">&#128119; Brian</option>
-          <option value="karina">&#128119; Karina</option>
-          <option value="jhony">&#128119; Jhony</option>
-          <option value="natalia">&#128119; Natalia</option>
-          <option value="manuel">&#128119; Manuel</option>
-          <option value="claudia">&#128119; Claudia</option>
-          <option value="daniela">&#128119; Daniela</option>
-          <option value="juan">&#128119; Juan</option>
-          <option value="luzl">&#128119; LuzL</option>
-          <option value="liz">&#128119; Liz</option>
-          <option value="ana">&#128119; Ana</option>
-          <option value="leidy">&#128119; Leidy</option>
-          <option value="bivian">&#128119; Bivian</option>
-          <option value="vaneza">&#128119; Vaneza</option>
-          <option value="brayan">&#128119; Brayan</option>
-          <option value="nicoll">&#128119; Nicoll</option>
-          <option value="luis">&#128119; Luis</option>
-          <option value="estefania">&#128119; Estefania</option>
-          <option value="angela">&#128119; Angela</option>
-          <option value="camila">&#128119; Camila</option>
-          <option value="angie">&#128119; Angie</option>
-          <option value="mayra">&#128119; Mayra</option>
-          <option value="derly">&#128119; Derly</option>
-          <option value="luisa">&#128119; Luisa</option>
-          <option value="luzn">&#128119; LuzN</option>
-          <option value="andrea">&#128119; Andrea</option>
-          <option value="andres">&#128119; Andres</option>
-          <option value="diegoe">&#128119; DiegoE</option>
+          <option disabled>────── LOGISTICA CENDIS ──────</option>
+          <option value="log_diego">&#128666; Diego (Logistica CENDIS)</option>
+          <option value="log_angelica">&#128666; Angelica (Logistica CENDIS)</option>
+          <option value="log_lorena">&#128666; Lorena (Logistica CENDIS)</option>
+          <option value="log_jenny">&#128666; Jenny (Logistica CENDIS)</option>
+          <option disabled>────────── AUXILIARES CEDIS ──────────</option>
+          <option value="yuri">&#128119; Yuri (CEDIS)</option>
+          <option value="julio">&#128119; Julio (CEDIS)</option>
+          <option value="hernan">&#128119; Hernan (CEDIS)</option>
+          <option value="diego">&#128119; Diego (CEDIS)</option>
+          <option value="brian">&#128119; Brian (CEDIS)</option>
+          <option value="karina">&#128119; Karina (CEDIS)</option>
+          <option value="jhony">&#128119; Jhony (CEDIS)</option>
+          <option value="natalia">&#128119; Natalia (CEDIS)</option>
+          <option value="manuel">&#128119; Manuel (CEDIS)</option>
+          <option value="claudia">&#128119; Claudia (CEDIS)</option>
+          <option value="daniela">&#128119; Daniela (CEDIS)</option>
+          <option value="juan">&#128119; Juan (CEDIS)</option>
+          <option value="luzl">&#128119; LuzL (CEDIS)</option>
+          <option value="liz">&#128119; Liz (CEDIS)</option>
+          <option value="ana">&#128119; Ana (CEDIS)</option>
+          <option value="leidy">&#128119; Leidy (CEDIS)</option>
+          <option value="bivian">&#128119; Bivian (CEDIS)</option>
+          <option value="vaneza">&#128119; Vaneza (CEDIS)</option>
+          <option value="brayan">&#128119; Brayan (CEDIS)</option>
+          <option value="nicoll">&#128119; Nicoll (CEDIS)</option>
+          <option value="luis">&#128119; Luis (CEDIS)</option>
+          <option value="estefania">&#128119; Estefania (CEDIS)</option>
+          <option value="angela">&#128119; Angela (CEDIS)</option>
+          <option value="camila">&#128119; Camila (CEDIS)</option>
+          <option value="angie">&#128119; Angie (CEDIS)</option>
+          <option value="mayra">&#128119; Mayra (CEDIS)</option>
+          <option value="derly">&#128119; Derly (CEDIS)</option>
+          <option value="luisa">&#128119; Luisa (CEDIS)</option>
+          <option value="luzn">&#128119; LuzN (CEDIS)</option>
+          <option value="andrea">&#128119; Andrea (CEDIS)</option>
+          <option value="andres">&#128119; Andres (CEDIS)</option>
+          <option value="diegoe">&#128119; DiegoE (CEDIS)</option>
+          <option disabled>────── AUXILIARES B09 ──────</option>
+          <option value="jose_santiago">&#128119; Jose Santiago Ramirez Obando (Auxiliar B09)</option>
+          <option value="yuliana">&#128119; Yuliana Andrea Quira Manquillo (Auxiliar B09)</option>
+          <option value="luisa_fernanda">&#128119; Luisa Fernanda Garcia Orozco (Auxiliar B09)</option>
+          <option value="nedi_yojana">&#128119; Nedi Yojana Zamora Yandi (Auxiliar B09)</option>
+          <option value="beatriz_eugenia">&#128119; Beatriz Eugenia Urbano Botina (Auxiliar B09)</option>
+          <option value="mery_yolanda">&#128119; Mery Yolanda Cadavid Bermudez (Auxiliar B09)</option>
         </select>
       </div>
       <div class="mb-3">
@@ -499,5 +510,28 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="visor_script.js"></script>
+<script>
+  /* ── Tom Select para login del Visor ── */
+  function initVisorTomSelects(){
+    var lv = document.getElementById('loginUsuarioVisor');
+    if(lv && typeof TomSelect !== 'undefined' && !lv.tomselect){
+      new TomSelect(lv, {
+        allowEmptyOption: true,
+        create: false,
+        searchField: ['text'],
+        render: {
+          option: function(item, escape){
+            return '<div class="ts-opt">'+item.text+'</div>';
+          }
+        }
+      });
+    }
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initVisorTomSelects);
+  } else {
+    initVisorTomSelects();
+  }
+</script>
 </body>
 </html>
