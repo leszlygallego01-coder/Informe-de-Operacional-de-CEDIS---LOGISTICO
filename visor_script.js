@@ -10,7 +10,7 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxQueXJ02uQ3KJxROdrkq6fF0x6HDKVLOiFZrEW3_Y02724ZyeGOMFyyd5bEA6e-4iL/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxJdi1RPTEXVuoAa8wWEGp4vZ1qnSK78pMWIgJob8nZZw4GaJHgwjVTieiRCA-ut8d1/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -561,8 +561,10 @@ function poblarFiltros() {
 
 function dentroDeRango(fechaTexto) {
   const d = aFecha(fechaTexto);
-  const desde = val('f_desde') ? aFecha(val('f_desde')) : null;
-  const hasta = val('f_hasta') ? aFecha(val('f_hasta')) : null;
+  /* Si solo hay Fecha de Apertura (rot_fecha), filtrar por ese dia */
+  const rotFecha = val('rot_fecha');
+  const desde = val('f_desde') ? aFecha(val('f_desde')) : (rotFecha ? aFecha(rotFecha) : null);
+  const hasta = val('f_hasta') ? aFecha(val('f_hasta')) : (rotFecha ? aFecha(rotFecha) : null);
   if (!d) return !desde && !hasta;
   if (desde && d < desde) return false;
   if (hasta) { const fin = new Date(hasta); fin.setHours(23, 59, 59); if (d > fin) return false; }
@@ -629,37 +631,335 @@ function pintarKpis(lista) {
 }
 
 function pintarGraficas(lista, pAlist, pEspera, pTransito) {
-  const conteo = { CUMPLIDO: 0, 'EN TRANSITO': 0, PENDIENTE: 0 };
-  lista.forEach(t => { conteo[t.estado] = (conteo[t.estado] || 0) + 1; });
+  /* ── Gráfica 1: Estado del seguimiento (Dona) ── */
+  const conteo = { CUMPLIDO: 0, 'EN TRANSITO': 0, PENDIENTE: 0, NOVEDAD: 0 };
+  lista.forEach(t => {
+    const est = t.tieneNovedad && t.estado !== 'CUMPLIDO' ? 'NOVEDAD' : t.estado;
+    conteo[est] = (conteo[est] || 0) + 1;
+  });
+  // Filtrar solo estados con datos > 0
+  const estadosActivos = Object.keys(conteo).filter(k => conteo[k] > 0);
+  const datosEstados = estadosActivos.map(k => conteo[k]);
+  const totalEstados = datosEstados.reduce((a, b) => a + b, 0);
+  const coloresEstados = {
+    CUMPLIDO: '#2fb457',
+    'EN TRANSITO': '#0d6efd',
+    PENDIENTE: '#ffc107',
+    NOVEDAD: '#dc3545'
+  };
+  const bgEstados = estadosActivos.map(k => coloresEstados[k] || '#6c757d');
 
+  dibujarDona('chartEstados', estadosActivos, datosEstados, bgEstados, totalEstados);
+
+  /* ── Gráfica 2: Traslados por zona (Barras) ── */
   const porZona = {};
   lista.forEach(t => { const z = t.zona || 'SIN ZONA'; porZona[z] = (porZona[z] || 0) + 1; });
+  // Ordenar por conteo descendente
+  const zonasOrdenadas = Object.entries(porZona)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => ({ zona: k, conteo: v }));
+  const labelsZona = zonasOrdenadas.map(z => z.zona);
+  const datosZona = zonasOrdenadas.map(z => z.conteo);
+  // Colores distintos por zona
+  const coloresZona = [
+    '#0d6efd', '#198754', '#6f42c1', '#d63384', '#fd7e14',
+    '#20c997', '#0dcaf0', '#ffc107', '#dc3545', '#6c757d',
+    '#491078', '#0b5ed7', '#479f40', '#c74282'
+  ];
+  const bgZona = labelsZona.map((_, i) => coloresZona[i % coloresZona.length]);
 
-  dibujar('chartEstados', 'doughnut', Object.keys(conteo), [{
-    data: Object.values(conteo),
-    backgroundColor: ['#2fb457', '#0d6efd', '#ffc107']
-  }], { plugins: { legend: { position: 'bottom' } } });
+  dibujarBarrasZona('chartZonas', labelsZona, datosZona, bgZona);
 
-  dibujar('chartZonas', 'bar', Object.keys(porZona), [{
-    label: 'Traslados', data: Object.values(porZona), backgroundColor: '#0d6efd'
-  }], { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } });
+  /* ── Gráfica 3: Tiempos promedio por proceso (Columnas con datalabels) ── */
+  const labelsTiempo = ['Alistamiento', 'Espera despacho', 'Tránsito'];
+  const datosTiempo = [
+    pAlist !== null ? Math.round(pAlist * 10) / 10 : 0,
+    pEspera !== null ? Math.round(pEspera * 10) / 10 : 0,
+    pTransito !== null ? Math.round(pTransito * 10) / 10 : 0
+  ];
+  const bgTiempo = ['#2fb457', '#0d6efd', '#8e44ad'];
+  const tieneDatosTiempo = datosTiempo.some(v => v > 0);
 
-  dibujar('chartTiempos', 'bar',
-    ['Alistamiento', 'Espera despacho', 'Transito'],
-    [{
-      label: 'Horas promedio',
-      data: [pAlist || 0, pEspera || 0, pTransito || 0].map(v => Math.round(v * 10) / 10),
-      backgroundColor: ['#2fb457', '#0d6efd', '#8e44ad']
-    }],
-    { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } });
+  dibujarBarrasTiempo('chartTiempos', labelsTiempo, datosTiempo, bgTiempo, tieneDatosTiempo);
 }
 
-function dibujar(canvasId, tipo, labels, datasets, opciones) {
+/** Dibuja gráfica de dona (Estado del seguimiento) con etiquetas de cantidad y porcentaje. */
+function dibujarDona(canvasId, labels, data, bgColors, total) {
   if (CHARTS[canvasId]) CHARTS[canvasId].destroy();
+  if (!labels.length || total === 0) {
+    // Estado vacío limpio: mostrar dona gris con "Sin datos"
+    CHARTS[canvasId] = new Chart($(canvasId), {
+      type: 'doughnut',
+      data: {
+        labels: ['Sin datos'],
+        datasets: [{ data: [1], backgroundColor: ['#e9ecef'], borderWidth: 0 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { color: '#6c757d' } },
+          tooltip: { enabled: false }
+        },
+        cutout: '65%'
+      },
+      plugins: [{
+        id: 'centroVacio',
+        afterDraw(chart) {
+          const { ctx, chartArea: { left, right, top, bottom } } = chart;
+          const cx = (left + right) / 2, cy = (top + bottom) / 2;
+          ctx.save();
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.font = '600 16px system-ui';
+          ctx.fillStyle = '#6c757d';
+          ctx.fillText('Sin datos', cx, cy);
+          ctx.restore();
+        }
+      }]
+    });
+    return;
+  }
   CHARTS[canvasId] = new Chart($(canvasId), {
-    type: tipo,
-    data: { labels, datasets },
-    options: Object.assign({ responsive: true, maintainAspectRatio: false }, opciones || {})
+    type: 'doughnut',
+    data: {
+      labels: labels,
+      datasets: [{
+        data: data,
+        backgroundColor: bgColors,
+        borderWidth: 2,
+        borderColor: '#fff',
+        hoverOffset: 8
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            padding: 14,
+            usePointStyle: true,
+            pointStyleWidth: 10,
+            font: { size: 11, weight: '500' },
+            generateLabels(chart) {
+              const ds = chart.data.datasets[0];
+              return chart.data.labels.map((label, i) => ({
+                text: label + ' (' + ds.data[i] + ' — ' + Math.round(ds.data[i] * 100 / total) + '%)',
+                fillStyle: ds.backgroundColor[i],
+                strokeStyle: ds.backgroundColor[i],
+                lineWidth: 0,
+                pointStyle: 'circle',
+                index: i
+              }));
+            }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const v = ctx.parsed;
+              const pct = Math.round(v * 100 / total);
+              return ' ' + ctx.label + ': ' + v + ' (' + pct + '%)';
+            }
+          }
+        }
+      }
+    },
+    plugins: [{
+      id: 'centroDona',
+      afterDraw(chart) {
+        const { ctx, chartArea: { left, right, top, bottom } } = chart;
+        const cx = (left + right) / 2, cy = (top + bottom) / 2;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '700 22px system-ui';
+        ctx.fillStyle = '#212529';
+        ctx.fillText(total, cx, cy - 8);
+        ctx.font = '400 11px system-ui';
+        ctx.fillStyle = '#6c757d';
+        ctx.fillText('traslados', cx, cy + 10);
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+/** Dibuja gráfica de barras por zona con datalabels de conteo. */
+function dibujarBarrasZona(canvasId, labels, data, bgColors) {
+  if (CHARTS[canvasId]) CHARTS[canvasId].destroy();
+  if (!labels.length || data.every(v => v === 0)) {
+    CHARTS[canvasId] = new Chart($(canvasId), {
+      type: 'bar',
+      data: { labels: ['Sin datos'], datasets: [{ data: [0], backgroundColor: ['#e9ecef'] }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: { x: { display: false }, y: { beginAtZero: true, display: false } }
+      }
+    });
+    return;
+  }
+  CHARTS[canvasId] = new Chart($(canvasId), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Traslados',
+        data: data,
+        backgroundColor: bgColors,
+        borderRadius: 4,
+        maxBarThickness: 36
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: labels.length > 8 ? 'y' : 'x',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(ctx) {
+              const val = ctx.chart.options.indexAxis === 'y' ? ctx.parsed.x : ctx.parsed.y;
+              return ' ' + val + ' traslados';
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { stepSize: 1, font: { size: 10 } },
+          grid: { color: '#f0f0f0' }
+        },
+        x: {
+          ticks: {
+            font: { size: 9 },
+            maxRotation: 45,
+            callback(val) {
+              const lbl = this.getLabelForValue(val);
+              return lbl.length > 14 ? lbl.substring(0, 12) + '…' : lbl;
+            }
+          },
+          grid: { display: false }
+        }
+      }
+    },
+    plugins: [{
+      id: 'datalabelsZona',
+      afterDatasetDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        const horiz = chart.options.indexAxis === 'y';
+        meta.data.forEach((bar, i) => {
+          const v = chart.data.datasets[0].data[i];
+          if (!v) return;
+          ctx.save();
+          ctx.font = '600 11px system-ui';
+          ctx.fillStyle = '#212529';
+          if (horiz) {
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(v, bar.x + 5, bar.y);
+          } else {
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(v, bar.x, bar.y - 4);
+          }
+          ctx.restore();
+        });
+      }
+    }]
+  });
+}
+
+/** Dibuja gráfica de columnas de tiempos con datalabels (1 decimal + ' hrs'). */
+function dibujarBarrasTiempo(canvasId, labels, data, bgColors, tieneDatos) {
+  if (CHARTS[canvasId]) CHARTS[canvasId].destroy();
+  if (!tieneDatos) {
+    CHARTS[canvasId] = new Chart($(canvasId), {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ data: [0, 0, 0], backgroundColor: ['#dee2e6','#dee2e6','#dee2e6'] }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: { y: { beginAtZero: true, display: true, title: { display: true, text: 'Horas', font: { size: 10 } } }, x: { grid: { display: false } } }
+      },
+      plugins: [{
+        id: 'sinDatosTiempo',
+        afterDatasetDraw(chart) {
+          const { ctx } = chart;
+          const meta = chart.getDatasetMeta(0);
+          meta.data.forEach((bar) => {
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.font = '500 11px system-ui';
+            ctx.fillStyle = '#adb5bd';
+            ctx.fillText('--', bar.x, bar.y - 4);
+            ctx.restore();
+          });
+        }
+      }]
+    });
+    return;
+  }
+  CHARTS[canvasId] = new Chart($(canvasId), {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Horas promedio',
+        data: data,
+        backgroundColor: bgColors,
+        borderRadius: 6,
+        maxBarThickness: 52
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(ctx) { return ' ' + ctx.parsed.y.toFixed(1) + ' horas'; }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Horas', font: { size: 11 } },
+          ticks: { font: { size: 10 } },
+          grid: { color: '#f0f0f0' }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 11, weight: '500' } }
+        }
+      }
+    },
+    plugins: [{
+      id: 'datalabelsTiempo',
+      afterDatasetDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        meta.data.forEach((bar, i) => {
+          const v = chart.data.datasets[0].data[i];
+          ctx.save();
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.font = '700 13px system-ui';
+          ctx.fillStyle = '#212529';
+          ctx.fillText(v.toFixed(1) + ' hrs', bar.x, bar.y - 6);
+          ctx.restore();
+        });
+      }
+    }]
   });
 }
 
@@ -1290,7 +1590,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Botones de Apertura del Dia
   if ($('btnGuardarRotacion')) $('btnGuardarRotacion').addEventListener('click', accionGuardarRotacion);
   if ($('rot_fecha')) {
-    $('rot_fecha').addEventListener('change', accionCargarRotacionFecha);
+    $('rot_fecha').addEventListener('change', function() { accionCargarRotacionFecha(); refrescarTodo(); });
     /* Default: fecha de hoy */
     const hoyISO = new Date().toISOString().split('T')[0];
     $('rot_fecha').value = hoyISO;
