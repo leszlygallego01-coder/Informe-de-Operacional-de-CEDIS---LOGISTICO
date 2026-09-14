@@ -10,7 +10,7 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwwoy9QiSaIeMaLDjpZZozyNwS9DN8tu1qvCH-FvfsGLUn0O8g1nS10Kv7ItE1Tf3hy/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxFRZ9X19FDTDifXadndOvdHKuLQ9DBN4Nk4iuIojMeY5uwos161_8qmZ7s3h6bQVyw/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -50,16 +50,20 @@ function cargarConfigVisor() {
     const raw = localStorage.getItem(LS_KEY_VISOR);
     const cfg = raw ? Object.assign({}, VISOR_DEFAULTS, JSON.parse(raw)) : Object.assign({}, VISOR_DEFAULTS);
     if (!cfg.apiUrl || cfg.apiUrl.trim() === '') cfg.apiUrl = VISOR_API_URL;
+    /* v3.6: Forzar actualizacion de URL si la guardada es diferente a la nueva por defecto */
+    if (cfg.apiUrl && cfg.apiUrl.trim() !== '' && cfg.apiUrl.trim() !== VISOR_API_URL.trim()) {
+      console.log('[VISOR] Actualizando URL del Web App a la nueva version v3.6');
+      cfg.apiUrl = VISOR_API_URL;
+    }
     if (cfg.apiUrl && cfg.apiUrl.trim() !== '' && cfg.modoLocal) {
       cfg.modoLocal = false;
     }
-    /* Asegurar carpetas nuevas */
-    if (!cfg.folders.seguridad) cfg.folders.seguridad = VISOR_DEFAULTS.folders.seguridad;
-    if (!cfg.folders.rotacion) cfg.folders.rotacion = VISOR_DEFAULTS.folders.rotacion;
-    if (!cfg.folders.trasladosConsulta) cfg.folders.trasladosConsulta = VISOR_DEFAULTS.folders.trasladosConsulta;
-    if (!cfg.folders.asignacion) cfg.folders.asignacion = VISOR_DEFAULTS.folders.asignacion;
-    if (!cfg.folders.entregaLogistica) cfg.folders.entregaLogistica = VISOR_DEFAULTS.folders.entregaLogistica;
-    if (!cfg.folders.despachoAsignacion) cfg.folders.despachoAsignacion = VISOR_DEFAULTS.folders.despachoAsignacion;
+    /* Asegurar carpetas nuevas y actualizar IDs si cambiaron */
+    Object.keys(VISOR_DEFAULTS.folders).forEach(k => {
+      if (!cfg.folders[k] || cfg.folders[k] !== VISOR_DEFAULTS.folders[k]) {
+        cfg.folders[k] = VISOR_DEFAULTS.folders[k];
+      }
+    });
     return cfg;
   } catch (e) { return Object.assign({}, VISOR_DEFAULTS); }
 }
