@@ -9,7 +9,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwezuqN5E7kpWaWEfsrWVK3LcdqhtkRSeVxGl8tRf8IVTlCXzxv9NTPo66lxpEXdlss/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbzhP06AFhQRXTWYngK_BhmidE14y2Qz6Ech2NbQSC6sLlPInDokgSxfrEsEebRXFVwj/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -516,41 +516,42 @@ function _aplicarFuentes(r) {
   console.log('[_aplicarFuentes] Filas por fuente:', conteo);
 }
 
-/** sincronizarDrive — Lee TODAS las carpetas de Drive y hojas, consolida en BD_CONSOLIDADO_DRIVE,
- *  actualiza CacheService y refresca los KPI del VISOR. Timeout de 5 min (lectura Drive pesada).
+/** sincronizarDrive — Lee BD_CONSOLIDADO_DRIVE (hoja directa, sin leer carpetas Drive),
+ *  actualiza datos y refresca los KPI del VISOR. Timeout 10s (lectura de hoja rapida).
+ *  v3.11: cambiado de procesarYConsolidarDrive a consolidadoDesdeHoja para <2s.
  */
 async function sincronizarDrive() {
   const btn = $('btnSincronizarDrive');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sincronizando...'; }
   $('estadoApi').className = 'badge bg-info';
-  $('estadoApi').textContent = 'Sincronizando Drive...';
-  toast('<strong>Sincronizando Drive...</strong> Leyendo todas las carpetas y hojas (puede tardar hasta 2 min).', 'info', 8000);
+  $('estadoApi').textContent = 'Sincronizando...';
+  toast('<strong>Sincronizando...</strong> Leyendo datos consolidados.', 'info', 5000);
 
   try {
-    const r = await api('procesarYConsolidarDrive', {}, 300000); // 5 min timeout
+    const r = await api('consolidadoDesdeHoja', {}, 10000); // 10s timeout (hoja directa)
 
     if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
       _aplicarFuentes(r);
       $('estadoApi').className = 'badge bg-success';
-      $('estadoApi').textContent = 'Drive OK';
-      toast('✓ <strong>Sincronización completada.</strong> ' + (r.msg || Object.keys(r.fuentes).length + ' fuentes leídas.'), 'success', 5000);
+      $('estadoApi').textContent = '✓ Sincronizado';
+      toast('✓ <strong>Sincronización completada.</strong> ' + (r.msg || Object.keys(r.fuentes).length + ' fuentes cargadas.'), 'success', 5000);
       construirConsolidado();
       poblarFiltros();
       refrescarTodo();
-      console.log('[sincronizarDrive] OK — fuentes:', Object.keys(r.fuentes), 'duracion:', r.duracionMs + 'ms');
+      console.log('[sincronizarDrive] OK — fuentes:', Object.keys(r.fuentes));
     } else {
       $('estadoApi').className = 'badge bg-warning text-dark';
-      $('estadoApi').textContent = 'Error sync';
-      toast('Error al sincronizar: ' + (r.error || 'respuesta sin datos'), 'danger', 8000);
-      console.error('[sincronizarDrive] Error:', r);
+      $('estadoApi').textContent = 'Sin datos';
+      toast('Sin datos consolidados: ' + (r.error || 'respuesta vacia'), 'warning', 8000);
+      console.warn('[sincronizarDrive] Sin datos:', r);
     }
   } catch (e) {
     $('estadoApi').className = 'badge bg-danger';
     $('estadoApi').textContent = 'Error sync';
     if (e.message === 'TIMEOUT') {
-      toast('La sincronización excedió 5 minutos. Intente de nuevo o espere al trigger automático.', 'warning', 10000);
+      toast('La sincronización excedió 10 segundos. Intente de nuevo.', 'warning', 8000);
     } else {
-      toast('Error al sincronizar Drive: ' + e.message, 'danger', 8000);
+      toast('Error al sincronizar: ' + e.message, 'danger', 8000);
     }
     console.error('[sincronizarDrive] Exception:', e.message);
   } finally {
