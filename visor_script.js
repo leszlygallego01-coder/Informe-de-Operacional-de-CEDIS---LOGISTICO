@@ -8,13 +8,12 @@
 'use strict';
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
-const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwAN2KOVntoaPlM51dyRCjN-oY2lRCCV4k1m_xkaMQ5l6saLyeNIsLECtS4OpcBpazr/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwezuqN5E7kpWaWEfsrWVK3LcdqhtkRSeVxGl8tRf8IVTlCXzxv9NTPo66lxpEXdlss/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
-  modoLocal: false,
+  /* modoLocal eliminado v3.10.0 — datos SIEMPRE desde Drive */
   folders: {
     despachos:   '1tUXm2FVVFWBnyeBrzTlRpobYTKxk7OH8',
     trasladosConsulta: '1u30YFhTsocLuUoFrVUnb6Fk9zwVsT_E_',
@@ -52,12 +51,11 @@ function cargarConfigVisor() {
     if (!cfg.apiUrl || cfg.apiUrl.trim() === '') cfg.apiUrl = VISOR_API_URL;
     /* v3.8: Forzar actualizacion de URL si la guardada es diferente a la nueva por defecto */
     if (cfg.apiUrl && cfg.apiUrl.trim() !== '' && cfg.apiUrl.trim() !== VISOR_API_URL.trim()) {
-      console.log('[VISOR] Actualizando URL del Web App a la nueva version v3.8');
+      console.log('[VISOR] Actualizando URL del Web App a la nueva version v3.10.0');
       cfg.apiUrl = VISOR_API_URL;
     }
-    if (cfg.apiUrl && cfg.apiUrl.trim() !== '' && cfg.modoLocal) {
-      cfg.modoLocal = false;
-    }
+    /* v3.10.0: modoLocal eliminado — datos siempre desde Drive */
+    if (cfg.modoLocal) delete cfg.modoLocal;
     /* Asegurar carpetas nuevas y actualizar IDs si cambiaron */
     Object.keys(VISOR_DEFAULTS.folders).forEach(k => {
       if (!cfg.folders[k] || cfg.folders[k] !== VISOR_DEFAULTS.folders[k]) {
@@ -411,12 +409,10 @@ async function apiGetFallback(payload, timeoutMs = 8000) {
 async function cargarDatos() {
   console.log('[cargarDatos] Iniciando carga de datos...');
   console.log('[cargarDatos] API URL:', CONFIG.apiUrl);
-  console.log('[cargarDatos] Modo local:', CONFIG.modoLocal);
   $('estadoApi').className = 'badge bg-light text-dark';
   $('estadoApi').textContent = 'Cargando...';
 
   if (!CONFIG.apiUrl) {
-    _cargarFuentesLocales();
     $('estadoApi').className = 'badge bg-warning text-dark';
     $('estadoApi').textContent = 'Sin URL de Web App';
     toast('Configure la URL de la Web App en Ajustes para leer datos de Drive.', 'warning');
@@ -424,18 +420,10 @@ async function cargarDatos() {
     return;
   }
 
-  if (CONFIG.modoLocal) {
-    _cargarFuentesLocales();
-    $('estadoApi').className = 'badge bg-secondary';
-    $('estadoApi').textContent = 'Modo local';
-    construirConsolidado(); poblarFiltros(); refrescarTodo();
-    return;
-  }
-
   // ── MODO API: estrategia de 2 fases ──
-  // FASE 1: Intentar leer de caché (timeout corto 8s) — la respuesta normal <2s
-  // FASE 2: Si caché vacía, backend lee Drive directamente (timeout largo 60s)
-  //         Esto solo pasa en la primera carga antes de que el trigger corra
+  // FASE 1: Intentar leer de caché/hoja (timeout 8s) — la respuesta normal <2s
+  // FASE 2: Si caché vacía, retry (timeout 30s) — espera a que el backend devuelva datos
+  // Si ambas fallan, se muestra error y botón "Sincronizar Drive"
 
   let exito = false;
 
@@ -446,21 +434,14 @@ async function cargarDatos() {
     const r = await api('consolidadoVisor', {}, 8000);
 
     if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
-      console.log('[cargarDatos] ✓ Caché disponible. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
+      console.log('[cargarDatos] ✓ Datos disponibles. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
       _aplicarFuentes(r);
       $('estadoApi').className = 'badge bg-success';
-      $('estadoApi').textContent = r.origen === 'hoja' ? 'Caché (hoja)' : r.origen === 'drive' ? 'Drive OK' : 'Caché OK';
+      $('estadoApi').textContent = r.origen === 'hoja' ? 'Caché (hoja)' : r.origen === 'cache' ? 'Caché OK' : 'Drive OK';
       exito = true;
-    } else if (r.ok && r.origen === 'drive') {
-      // TIER 3 respondió — backend leyó Drive directamente
-      console.log('[cargarDatos] ✓ Datos desde Drive (TIER 3 fallback). Fuentes:', Object.keys(r.fuentes));
-      _aplicarFuentes(r);
-      $('estadoApi').className = 'badge bg-success';
-      $('estadoApi').textContent = 'Drive OK';
-      exito = true;
-    } else if (r.ok === false || (r.fuentes && Object.keys(r.fuentes).length === 0)) {
-      // Caché vacía — pasar a FASE 2 con timeout largo
-      console.warn('[cargarDatos] Caché vacía, intentando lectura directa de Drive...');
+    } else if (r.ok === false) {
+      // Caché vacía — pasar a FASE 2
+      console.warn('[cargarDatos] Caché vacía (origen=' + r.origen + '), reintentando...');
     } else {
       console.warn('[cargarDatos] Respuesta inesperada en FASE 1:', r);
     }
@@ -473,35 +454,35 @@ async function cargarDatos() {
     }
   }
 
-  // ── FASE 2: Si FASE 1 no entregó datos, retry con timeout largo (Drive directo) ──
+  // ── FASE 2: Si FASE 1 no entregó datos, retry con timeout mayor ──
   if (!exito) {
     try {
-      console.log('[cargarDatos] FASE 2: Solicitando datos con timeout largo (60s) para lectura de Drive...');
+      console.log('[cargarDatos] FASE 2: Reintentando lectura (timeout 30s)...');
       $('estadoApi').className = 'badge bg-warning text-dark';
-      $('estadoApi').textContent = 'Leyendo Drive...';
-      toast('Cargando datos desde Drive por primera vez (puede tardar ~30s)...', 'info', 5000);
+      $('estadoApi').textContent = 'Reintentando...';
+      toast('No se encontraron datos en caché. Reintentando...', 'info', 4000);
 
-      const r2 = await api('consolidadoVisor', {}, 60000);
+      const r2 = await api('consolidadoVisor', {}, 30000);
 
       if (r2.ok && r2.fuentes && Object.keys(r2.fuentes).length > 0) {
         console.log('[cargarDatos] ✓ Datos recibidos en FASE 2. Fuentes:', Object.keys(r2.fuentes), 'origen:', r2.origen);
         _aplicarFuentes(r2);
         $('estadoApi').className = 'badge bg-success';
-        $('estadoApi').textContent = r2.origen === 'drive' ? 'Drive OK' : 'Caché OK';
+        $('estadoApi').textContent = r2.origen === 'hoja' ? 'Caché (hoja)' : 'Caché OK';
         exito = true;
-        toast('✓ Datos cargados correctamente desde Drive.', 'success', 3000);
+        toast('✓ Datos cargados correctamente.', 'success', 3000);
       } else {
         console.error('[cargarDatos] FASE 2: respuesta sin datos:', r2);
         $('estadoApi').className = 'badge bg-warning text-dark';
         $('estadoApi').textContent = 'Sin datos';
-        toast('No se pudieron obtener datos ni de caché ni de Drive. Verifique que el backend tenga acceso a las carpetas.', 'warning', 8000);
+        toast('No hay datos consolidados. Presione <strong>"Sincronizar Drive"</strong> para leer las carpetas de Drive.', 'warning', 10000);
       }
     } catch (e2) {
       console.error('[cargarDatos] FASE 2 error:', e2.message);
       if (e2.message === 'TIMEOUT') {
         $('estadoApi').className = 'badge bg-warning text-dark';
-        $('estadoApi').textContent = 'Timeout Drive';
-        toast('La lectura de Drive excedió el tiempo límite. Intente de nuevo en unos minutos (el trigger actualizará la caché automáticamente).', 'warning', 8000);
+        $('estadoApi').textContent = 'Timeout';
+        toast('Tiempo de espera agotado. Presione <strong>"Sincronizar Drive"</strong> para actualizar los datos.', 'warning', 10000);
       } else if (e2.message !== 'AUTH_REQUIRED') {
         $('estadoApi').className = 'badge bg-danger';
         $('estadoApi').textContent = 'Error conexión';
@@ -511,14 +492,10 @@ async function cargarDatos() {
   }
 
   if (!exito) {
-    console.log('[cargarDatos] Usando datos locales como último fallback');
-    _cargarFuentesLocales();
+    console.log('[cargarDatos] Sin datos del servidor — no se usa localStorage');
     $('estadoApi').className = 'badge bg-warning text-dark';
-    $('estadoApi').textContent = 'Datos locales';
-    const lsData = localStorage.getItem(LS_DATA_CARGUE);
-    if (!CONFIG.modoLocal) {
-      toast('No se pudo obtener datos del servidor. Mostrando datos de sesión anterior.', 'warning');
-    }
+    $('estadoApi').textContent = 'Sin datos';
+    toast('Presione <strong>"Sincronizar Drive"</strong> en la barra superior para leer los datos de Drive.', 'warning', 10000);
   }
 
   construirConsolidado();
@@ -527,21 +504,9 @@ async function cargarDatos() {
   console.log('[cargarDatos] Carga completada.');
 }
 
-/** Carga FUENTES desde localStorage */
-function _cargarFuentesLocales() {
-  const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
-  FUENTES = {
-    despachos: local.despachos || [], logistica: local.logistica || [],
-    recepcion: local.recepcion || [], novedades: local.novedades || [],
-    inventario: local.inventario || [], facturacion: local.facturacion || [],
-    seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-    trasladosConsulta: local.trasladosConsulta || [],
-    asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
-    despachoAsignacion: local.despachoAsignacion || []
-  };
-}
+/** _cargarFuentesLocales ELIMINADO en v3.10.0 — datos SIEMPRE desde Drive/Sheets */
 
-/** Aplica datos de respuesta API a FUENTES y guarda backup en localStorage */
+/** Aplica datos de respuesta API a FUENTES (sin localStorage backup — v3.10.0) */
 function _aplicarFuentes(r) {
   Object.keys(FUENTES).forEach(m => {
     FUENTES[m] = (r.fuentes[m] && r.fuentes[m].rows) ? r.fuentes[m].rows : [];
@@ -549,10 +514,48 @@ function _aplicarFuentes(r) {
   const conteo = {};
   Object.keys(FUENTES).forEach(m => { conteo[m] = FUENTES[m].length; });
   console.log('[_aplicarFuentes] Filas por fuente:', conteo);
-  // Guardar en localStorage como backup
-  const backup = {};
-  Object.keys(FUENTES).forEach(m => { backup[m] = FUENTES[m]; });
-  try { localStorage.setItem(LS_DATA_CARGUE, JSON.stringify(backup)); } catch (eLS) {}
+}
+
+/** sincronizarDrive — Lee TODAS las carpetas de Drive y hojas, consolida en BD_CONSOLIDADO_DRIVE,
+ *  actualiza CacheService y refresca los KPI del VISOR. Timeout de 5 min (lectura Drive pesada).
+ */
+async function sincronizarDrive() {
+  const btn = $('btnSincronizarDrive');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sincronizando...'; }
+  $('estadoApi').className = 'badge bg-info';
+  $('estadoApi').textContent = 'Sincronizando Drive...';
+  toast('<strong>Sincronizando Drive...</strong> Leyendo todas las carpetas y hojas (puede tardar hasta 2 min).', 'info', 8000);
+
+  try {
+    const r = await api('procesarYConsolidarDrive', {}, 300000); // 5 min timeout
+
+    if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
+      _aplicarFuentes(r);
+      $('estadoApi').className = 'badge bg-success';
+      $('estadoApi').textContent = 'Drive OK';
+      toast('✓ <strong>Sincronización completada.</strong> ' + (r.msg || Object.keys(r.fuentes).length + ' fuentes leídas.'), 'success', 5000);
+      construirConsolidado();
+      poblarFiltros();
+      refrescarTodo();
+      console.log('[sincronizarDrive] OK — fuentes:', Object.keys(r.fuentes), 'duracion:', r.duracionMs + 'ms');
+    } else {
+      $('estadoApi').className = 'badge bg-warning text-dark';
+      $('estadoApi').textContent = 'Error sync';
+      toast('Error al sincronizar: ' + (r.error || 'respuesta sin datos'), 'danger', 8000);
+      console.error('[sincronizarDrive] Error:', r);
+    }
+  } catch (e) {
+    $('estadoApi').className = 'badge bg-danger';
+    $('estadoApi').textContent = 'Error sync';
+    if (e.message === 'TIMEOUT') {
+      toast('La sincronización excedió 5 minutos. Intente de nuevo o espere al trigger automático.', 'warning', 10000);
+    } else {
+      toast('Error al sincronizar Drive: ' + e.message, 'danger', 8000);
+    }
+    console.error('[sincronizarDrive] Exception:', e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '☁ Sincronizar Drive'; }
+  }
 }
 
 async function probarConexion() {
@@ -1751,7 +1754,7 @@ function pintarConfig() {
   $('v_api_url').value = CONFIG.apiUrl || '';
   ['despachos', 'logistica', 'recepcion', 'novedades', 'inventario', 'facturacion', 'seguridad', 'rotacion']
     .forEach(m => { $('v_folder_' + m).value = CONFIG.folders[m] || ''; });
-  $('v_modo_local').checked = !!CONFIG.modoLocal;
+  /* modoLocal eliminado v3.10.0 */
   pintarPerfilesVisor();
 }
 
@@ -1825,12 +1828,13 @@ document.addEventListener('DOMContentLoaded', () => {
     CONFIG.apiUrl = val('v_api_url');
     ['despachos', 'logistica', 'recepcion', 'novedades', 'inventario', 'facturacion', 'seguridad', 'rotacion']
       .forEach(m => { CONFIG.folders[m] = val('v_folder_' + m); });
-    CONFIG.modoLocal = $('v_modo_local').checked;
+    /* modoLocal eliminado v3.10.0 */
     localStorage.setItem(LS_KEY_VISOR, JSON.stringify(CONFIG));
     cargarDatos();
   });
 
   $('btnRefrescar').addEventListener('click', cargarDatos);
+  if ($('btnSincronizarDrive')) $('btnSincronizarDrive').addEventListener('click', sincronizarDrive);
   $('btnExportar').addEventListener('click', exportarConsolidado);
   if ($('btnProbarApi')) $('btnProbarApi').addEventListener('click', probarConexion);
   $('btnPlanillaDespachos').addEventListener('click', descargarPlanillaDespachos);
@@ -1862,6 +1866,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   cargarDatos();
 
-  // Actualizacion automatica cada 5 minutos cuando hay conexion a Drive.
-  setInterval(() => { if (!CONFIG.modoLocal && CONFIG.apiUrl) cargarDatos(); }, 300000);
+  // Actualizacion automatica cada 5 minutos.
+  setInterval(() => { if (CONFIG.apiUrl) cargarDatos(); }, 300000);
 });
