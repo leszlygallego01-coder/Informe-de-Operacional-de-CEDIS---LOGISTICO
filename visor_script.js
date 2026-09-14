@@ -10,7 +10,7 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwWFvwNwvXHPCA4dOsZvrU5pxXJJAeAglPAB3pCUaaIDe1xPvzK7Kp6z5VZCUJDlLs6/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxFRZ9X19FDTDifXadndOvdHKuLQ9DBN4Nk4iuIojMeY5uwos161_8qmZ7s3h6bQVyw/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -322,27 +322,50 @@ function zonaDeBodega(nombreBodega) {
 async function api(action, payload = {}) {
   if (!CONFIG.apiUrl) throw new Error('No se ha configurado la URL de la Web App.');
   const fullPayload = Object.assign({ action }, payload);
+  console.log('[api] Enviando:', action, fullPayload);
+
+  // Helper: fetch con timeout (30s)
+  function fetchWithTimeout(url, options, ms = 30000) {
+    return Promise.race([
+      fetch(url, options),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), ms))
+    ]);
+  }
+
   try {
     // INTENTO 1: POST con text/plain (evita preflight CORS)
-    const res = await fetch(CONFIG.apiUrl, {
+    const res = await fetchWithTimeout(CONFIG.apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       redirect: 'follow',
       body: JSON.stringify(fullPayload)
     });
     const ct = res.headers.get('Content-Type') || '';
+    console.log('[api] POST respuesta status:', res.status, 'Content-Type:', ct);
     if (ct.includes('text/html')) {
       throw new Error('AUTH_REQUIRED');
     }
-    const data = await res.json();
-    if (data.ok === false) throw new Error(data.error || 'Error del backend');
-    return data;
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      if (data.ok === false) throw new Error(data.error || 'Error del backend');
+      console.log('[api] POST exitoso, fuentes:', Object.keys(data.fuentes || {}));
+      return data;
+    } catch (jsonErr) {
+      console.error('[api] POST: respuesta no es JSON valido. Primeros 500 chars:', text.substring(0, 500));
+      throw new Error('La respuesta del servidor no es JSON. Verifique que la Web App este desplegada correctamente.');
+    }
   } catch (e) {
+    console.warn('[api] POST error:', e.message);
     // Auth redirect — no reintentar
     if (e.message === 'AUTH_REQUIRED') {
       throw new Error('La Web App requiere autenticacion. Desplieguela con acceso "Cualquier usuario" (publico).');
     }
-    // Network error — reintentar con GET
+    // Timeout — no reintentar, reportar
+    if (e.message === 'TIMEOUT') {
+      throw new Error('La Web App no respondio en 30 segundos. Puede que el backend tarde demasiado leyendo multiples fuentes. Intente de nuevo o use modo local.');
+    }
+    // Network/CORS error — reintentar con GET
     if (e.message && (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))) {
       console.log('[api] POST fallo, reintentando con GET...');
       try {
@@ -363,21 +386,59 @@ async function apiGetFallback(payload) {
     }
   }
   const getUrl = CONFIG.apiUrl + (CONFIG.apiUrl.includes('?') ? '&' : '?') + params.join('&') + '&_t=' + Date.now();
-  const res = await fetch(getUrl, { method: 'GET', redirect: 'follow' });
+  console.log('[api] GET fallback URL:', getUrl.substring(0, 150) + '...');
+  const res = await Promise.race([
+    fetch(getUrl, { method: 'GET', redirect: 'follow' }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 30000))
+  ]);
   const ct = res.headers.get('Content-Type') || '';
+  console.log('[api] GET respuesta status:', res.status, 'Content-Type:', ct);
   if (ct.includes('text/html')) {
     throw new Error('AUTH_REQUIRED');
   }
-  const data = await res.json();
-  if (data.ok === false) throw new Error(data.error || 'Error del backend');
-  return data;
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text);
+    if (data.ok === false) throw new Error(data.error || 'Error del backend');
+    console.log('[api] GET exitoso, fuentes:', Object.keys(data.fuentes || {}));
+    return data;
+  } catch (jsonErr) {
+    console.error('[api] GET: respuesta no es JSON. Primeros 500 chars:', text.substring(0, 500));
+    throw new Error('La respuesta GET del servidor no es JSON.');
+  }
 }
 
 async function cargarDatos() {
+  console.log('[cargarDatos] Iniciando carga de datos...');
+  console.log('[cargarDatos] API URL:', CONFIG.apiUrl);
+  console.log('[cargarDatos] Modo local:', CONFIG.modoLocal);
+  console.log('[cargarDatos] Folders:', JSON.stringify(CONFIG.folders));
   $('estadoApi').className = 'badge bg-light text-dark';
   $('estadoApi').textContent = 'Cargando...';
 
+  // Timeout global: si en 45s no hay respuesta, usar datos locales
+  let timeoutId = setTimeout(() => {
+    console.warn('[cargarDatos] TIMEOUT global (45s) — forzando modo local');
+    $('estadoApi').className = 'badge bg-warning text-dark';
+    $('estadoApi').textContent = 'Timeout API';
+    toast('La Web App no respondio en 45s. Usando datos locales.', 'warning');
+    const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
+    FUENTES = {
+      despachos: local.despachos || [], logistica: local.logistica || [],
+      recepcion: local.recepcion || [], novedades: local.novedades || [],
+      inventario: local.inventario || [], facturacion: local.facturacion || [],
+      seguridad: local.seguridad || [], rotacion: local.rotacion || [],
+      trasladosConsulta: local.trasladosConsulta || [],
+      asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
+      despachoAsignacion: local.despachoAsignacion || []
+    };
+    construirConsolidado();
+    poblarFiltros();
+    refrescarTodo();
+  }, 45000);
+
   if (!CONFIG.apiUrl) {
+    clearTimeout(timeoutId);
     const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
     FUENTES = {
       despachos: local.despachos || [], logistica: local.logistica || [],
@@ -392,6 +453,7 @@ async function cargarDatos() {
     $('estadoApi').textContent = 'Sin URL de Web App';
     toast('Configure la URL de la Web App en Ajustes para leer datos de Drive.', 'warning');
   } else if (CONFIG.modoLocal) {
+    clearTimeout(timeoutId);
     const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
     FUENTES = {
       despachos: local.despachos || [], logistica: local.logistica || [],
@@ -405,14 +467,83 @@ async function cargarDatos() {
     $('estadoApi').className = 'badge bg-secondary';
     $('estadoApi').textContent = 'Modo local';
   } else {
+    // PASO 1: Ping rapido para verificar que la API es alcanzable
     try {
+      console.log('[cargarDatos] Verificando conexion con ping...');
+      const pingUrl = CONFIG.apiUrl + '?action=ping&_t=' + Date.now();
+      const pingRes = await Promise.race([
+        fetch(pingUrl, { method: 'GET', redirect: 'follow' }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000))
+      ]);
+      const pingCt = pingRes.headers.get('Content-Type') || '';
+      if (pingCt.includes('text/html')) {
+        clearTimeout(timeoutId);
+        console.error('[cargarDatos] Ping devuelve HTML — la Web App requiere autenticacion');
+        $('estadoApi').className = 'badge bg-danger';
+        $('estadoApi').textContent = 'Sin acceso (Auth)';
+        toast('<strong>La Web App requiere autenticacion.</strong> Desplieguela con acceso "Cualquier usuario" (publico).', 'danger');
+        const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
+        FUENTES = {
+          despachos: local.despachos || [], logistica: local.logistica || [],
+          recepcion: local.recepcion || [], novedades: local.novedades || [],
+          inventario: local.inventario || [], facturacion: local.facturacion || [],
+          seguridad: local.seguridad || [], rotacion: local.rotacion || [],
+          trasladosConsulta: local.trasladosConsulta || [],
+          asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
+          despachoAsignacion: local.despachoAsignacion || []
+        };
+        construirConsolidado(); poblarFiltros(); refrescarTodo();
+        return;
+      }
+      try {
+        const pingData = JSON.parse(await pingRes.text());
+        if (!pingData || !pingData.ok) {
+          console.warn('[cargarDatos] Ping no devuelve ok — posible problema');
+        } else {
+          console.log('[cargarDatos] Ping OK — procediendo con consolidadoVisor');
+        }
+      } catch (jsonErr) {
+        console.warn('[cargarDatos] Ping respuesta no es JSON — posible redireccion:', jsonErr.message);
+      }
+    } catch (pingErr) {
+      clearTimeout(timeoutId);
+      console.error('[cargarDatos] Ping fallo:', pingErr.message);
+      $('estadoApi').className = 'badge bg-danger';
+      $('estadoApi').textContent = pingErr.message === 'TIMEOUT' ? 'API sin respuesta' : 'Sin conexion';
+      toast('No se pudo alcanzar la Web App: ' + pingErr.message + '. Usando datos locales.', 'danger');
+      const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
+      FUENTES = {
+        despachos: local.despachos || [], logistica: local.logistica || [],
+        recepcion: local.recepcion || [], novedades: local.novedades || [],
+        inventario: local.inventario || [], facturacion: local.facturacion || [],
+        seguridad: local.seguridad || [], rotacion: local.rotacion || [],
+        trasladosConsulta: local.trasladosConsulta || [],
+        asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
+        despachoAsignacion: local.despachoAsignacion || []
+      };
+      construirConsolidado(); poblarFiltros(); refrescarTodo();
+      return;
+    }
+
+    // PASO 2: Llamar consolidadoVisor (solo si ping fue OK)
+    try {
+      console.log('[cargarDatos] Llamando api(consolidadoVisor)...');
+      $('estadoApi').textContent = 'Leyendo Drive...';
       const r = await api('consolidadoVisor', { folderIds: CONFIG.folders });
+      clearTimeout(timeoutId);
+      console.log('[cargarDatos] Respuesta recibida. Fuentes:', Object.keys(r.fuentes || {}));
       Object.keys(FUENTES).forEach(m => {
         FUENTES[m] = (r.fuentes[m] && r.fuentes[m].rows) ? r.fuentes[m].rows : [];
       });
+      // Contar filas por fuente
+      const conteo = {};
+      Object.keys(FUENTES).forEach(m => { conteo[m] = FUENTES[m].length; });
+      console.log('[cargarDatos] Filas por fuente:', conteo);
       $('estadoApi').className = 'badge bg-success';
       $('estadoApi').textContent = 'Conectado a Drive';
     } catch (e) {
+      clearTimeout(timeoutId);
+      console.error('[cargarDatos] Error:', e.message);
       $('estadoApi').className = 'badge bg-danger';
       $('estadoApi').textContent = 'Error de conexion';
       toast('Error al conectar con Drive: ' + e.message + '. Usando datos locales.', 'danger');
@@ -426,13 +557,13 @@ async function cargarDatos() {
         asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
         despachoAsignacion: local.despachoAsignacion || []
       };
-      console.warn(e);
     }
   }
 
   construirConsolidado();
   poblarFiltros();
   refrescarTodo();
+  console.log('[cargarDatos] Carga completada.');
 }
 
 async function probarConexion() {
@@ -442,11 +573,21 @@ async function probarConexion() {
   badge.className = 'badge bg-warning text-dark';
   badge.textContent = 'Probando conexion...';
 
+  // Helper: fetch con timeout (10s para ping)
+  function fetchTimeout(url, options, ms) {
+    return Promise.race([
+      fetch(url, options),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), ms))
+    ]);
+  }
+
   // Primero probar con GET directo (mas confiable para CORS con Apps Script)
   try {
     const pingUrl = CONFIG.apiUrl + '?action=ping&_t=' + Date.now();
-    const res = await fetch(pingUrl, { method: 'GET', redirect: 'follow' });
+    console.log('[probarConexion] GET ping:', pingUrl);
+    const res = await fetchTimeout(pingUrl, { method: 'GET', redirect: 'follow' }, 10000);
     const ct = res.headers.get('Content-Type') || '';
+    console.log('[probarConexion] GET status:', res.status, 'Content-Type:', ct);
     if (ct.includes('text/html')) {
       badge.className = 'badge bg-danger';
       badge.textContent = 'Sin acceso';
@@ -456,16 +597,28 @@ async function probarConexion() {
       if (btn) { btn.disabled = false; btn.innerHTML = '&#127760; Probar Conexion'; }
       return;
     }
-    const data = await res.json();
-    if (data && data.ok) {
-      badge.className = 'badge bg-success';
-      badge.textContent = 'Conectado a Drive';
-      toast('Conexion exitosa con Google Drive', 'success');
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      if (data && data.ok) {
+        badge.className = 'badge bg-success';
+        badge.textContent = 'Conectado a Drive';
+        toast('Conexion exitosa con Google Drive', 'success');
+        if (btn) { btn.disabled = false; btn.innerHTML = '&#127760; Probar Conexion'; }
+        return;
+      }
+    } catch (jsonErr) {
+      console.error('[probarConexion] GET: respuesta no es JSON:', text.substring(0, 200));
+    }
+  } catch (getErr) {
+    console.log('[probarConexion] GET fallo:', getErr.message);
+    if (getErr.message === 'TIMEOUT') {
+      badge.className = 'badge bg-danger';
+      badge.textContent = 'Sin respuesta';
+      toast('La Web App no respondio en 10 segundos. Puede que el backend este saturado o no desplegado.', 'danger');
       if (btn) { btn.disabled = false; btn.innerHTML = '&#127760; Probar Conexion'; }
       return;
     }
-  } catch (getErr) {
-    console.log('[probarConexion] GET fallo, probando POST...', getErr);
   }
 
   // Fallback: probar con POST via api()
