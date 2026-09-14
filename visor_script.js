@@ -10,7 +10,7 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxQueXJ02uQ3KJxROdrkq6fF0x6HDKVLOiFZrEW3_Y02724ZyeGOMFyyd5bEA6e-4iL/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwwoy9QiSaIeMaLDjpZZozyNwS9DN8tu1qvCH-FvfsGLUn0O8g1nS10Kv7ItE1Tf3hy/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -25,7 +25,10 @@ const VISOR_DEFAULTS = {
     facturacion: '1hpRjykdlFyU_nsdXb0ttqOJdHNoXcTG-',
     seguridad:   '1I8XfW5vjt5qFkhnd5m6anaUA9ETVHf_N',
     rotacion:    '106BTSHLA8giLcW8qkvbJWiqA_7KiDpBi',
-    backup:      '1HVTZyLasrbZArTN34kmc0lCKaQa2qQ_5'
+    backup:      '1HVTZyLasrbZArTN34kmc0lCKaQa2qQ_5',
+    asignacion:  '15SX-1C48XJ7yMkiMlb88n8VlVhvP7eg_f2FGWp_B0Jk',
+    entregaLogistica: '1xC5Nj2VMNgh6N5XIfMTN-aJ2i8nQExANAEhgthWRNpU',
+    despachoAsignacion: '1InvQu8uiAZ8lGzleNDJ2Umm38cLw6J4a8aEA_aBm8Pc'
   },
   perfiles: {
     despachos:   { file: 'BD_PLANILLA_ENTREGA_DESPACHOS', sheet: 'DATOS' },
@@ -35,7 +38,10 @@ const VISOR_DEFAULTS = {
     facturacion: { file: 'BD_FACTURA_TRANSPORTE',         sheet: 'DATOS' },
     inventario:  { file: 'BD_VERIFICACION_INVENTARIO',     sheet: 'DATOS' },
     seguridad:   { file: 'BD_SEGURIDAD_DESPACHOS',         sheet: 'DATOS' },
-    rotacion:    { file: 'BD_ROTACION_DIARIA',             sheet: 'DATOS' }
+    rotacion:    { file: 'BD_ROTACION_DIARIA',             sheet: 'DATOS' },
+    asignacion:  { sheetId: '15SX-1C48XJ7yMkiMlb88n8VlVhvP7eg_f2FGWp_B0Jk', gid: '182323503', label: 'BD_ASIGNACION_DE_TRASLADO' },
+    entregaLogistica: { sheetId: '1xC5Nj2VMNgh6N5XIfMTN-aJ2i8nQExANAEhgthWRNpU', label: 'BD_ENTREGA_A_LOGISTICA' },
+    despachoAsignacion: { sheetId: '1InvQu8uiAZ8lGzleNDJ2Umm38cLw6J4a8aEA_aBm8Pc', gid: '683036860', label: 'Despacho y asignacion de traslados' }
   }
 };
 
@@ -51,6 +57,9 @@ function cargarConfigVisor() {
     if (!cfg.folders.seguridad) cfg.folders.seguridad = VISOR_DEFAULTS.folders.seguridad;
     if (!cfg.folders.rotacion) cfg.folders.rotacion = VISOR_DEFAULTS.folders.rotacion;
     if (!cfg.folders.trasladosConsulta) cfg.folders.trasladosConsulta = VISOR_DEFAULTS.folders.trasladosConsulta;
+    if (!cfg.folders.asignacion) cfg.folders.asignacion = VISOR_DEFAULTS.folders.asignacion;
+    if (!cfg.folders.entregaLogistica) cfg.folders.entregaLogistica = VISOR_DEFAULTS.folders.entregaLogistica;
+    if (!cfg.folders.despachoAsignacion) cfg.folders.despachoAsignacion = VISOR_DEFAULTS.folders.despachoAsignacion;
     return cfg;
   } catch (e) { return Object.assign({}, VISOR_DEFAULTS); }
 }
@@ -58,7 +67,7 @@ function cargarConfigVisor() {
 let CONFIG = cargarConfigVisor();
 
 /** Datos crudos por fuente y datos derivados. */
-let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [], trasladosConsulta: [] };
+let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [], trasladosConsulta: [], asignacion: [], entregaLogistica: [], despachoAsignacion: [] };
 let TRASLADOS = [];    // consolidado calculado
 let CHARTS = {};
 // Los grupos son fijos — no se necesita ROTACION_DIA ni historial
@@ -71,7 +80,13 @@ const CREDENCIALES_VISOR = {
   log_diego:           'Medis2024DiegoL',
   log_angelica:        'Medis2024AngelicaL',
   log_lorena:          'Medis2024LorenaL',
-  log_jenny:           'Medis2024JennyL'
+  log_jenny:           'Medis2024JennyL',
+  jose_santiago:       'Medis2024JoseB09',
+  yuliana:             'Medis2024YulianaB09',
+  luisa_fernanda:      'Medis2024LuisaB09',
+  nedi_yojana:         'Medis2024NediB09',
+  beatriz_eugenia:     'Medis2024BeatrizB09',
+  mery_yolanda:        'Medis2024MeryB09'
 };
 const LS_LOGIN_VISOR = 'MF_LOGIN_OK';
 const LS_PERFIL_VISOR = 'MF_PERFIL_ACTIVO';
@@ -116,7 +131,13 @@ const PERFILES_LABEL = {
   log_diego: 'Diego (Logistica CENDIS)',
   log_angelica: 'Angelica (Logistica CENDIS)',
   log_lorena: 'Lorena (Logistica CENDIS)',
-  log_jenny: 'Jenny (Logistica CENDIS)'
+  log_jenny: 'Jenny (Logistica CENDIS)',
+  jose_santiago: 'Jose Santiago (Auxiliar B09)',
+  yuliana: 'Yuliana (Auxiliar B09)',
+  luisa_fernanda: 'Luisa Fernanda (Auxiliar B09)',
+  nedi_yojana: 'Nedi Yojana (Auxiliar B09)',
+  beatriz_eugenia: 'Beatriz Eugenia (Auxiliar B09)',
+  mery_yolanda: 'Mery Yolanda (Auxiliar B09)'
 };
 
 /* ---------------------------------------------------------------------------
@@ -268,13 +289,13 @@ function esSi(v) { return normalizarCabecera(v) === 'si'; }
 /* ---------------------------------------------------------------------------
  * MAPA BODEGA → ZONA
  * ------------------------------------------------------------------------- */
-const BODEGA_ZONA_MAP = {"M111 B/G SAN MIGUEL":"ZONA CUNDINAMARCA","M111 B/G CHOACHI":"ZONA CUNDINAMARCA","M111 B/G CHIA":"ZONA CUNDINAMARCA","M111 B/G SOPO":"ZONA CUNDINAMARCA","M111 B/G CAJICA":"ZONA CUNDINAMARCA","M111 B/G COTA":"ZONA CUNDINAMARCA","M111 B/G FACATATIVA":"ZONA CUNDINAMARCA","M111 B/G MOSQUERA":"ZONA CUNDINAMARCA","M111 B/G MADRID":"ZONA CUNDINAMARCA","M111 B/G FUNZA":"ZONA CUNDINAMARCA","M111 B/G LA CALERA":"ZONA CUNDINAMARCA","M111 B/G SOACHA":"ZONA CUNDINAMARCA","M111 B/G ZIPAQUIRA":"ZONA CUNDINAMARCA","M111 B/G SIBATE":"ZONA CUNDINAMARCA","M111 B/G BOGOTA":"ZONA CUNDINAMARCA","M112 B/G IPIALES":"ZONA NARIÑO","M112 B/G TUMACO":"ZONA NARIÑO","M112 B/G TUQUERRES":"ZONA NARIÑO","M112 B/G PASTO":"ZONA NARIÑO","M112 B/G SAMANIEGO":"ZONA NARIÑO","M112 B/G LA UNION":"ZONA NARIÑO","M112 B/G ILLANO":"ZONA NARIÑO","M113 B/G SANTANDER DE QUILICHAO":"ZONA CAUCA NORTE","M113 B/G PUERTO TEJADA":"ZONA CAUCA NORTE","M113 B/G CALOTO":"ZONA CAUCA NORTE","M113 B/G PADILLA":"ZONA CAUCA NORTE","M113 B/G VILLARRICA":"ZONA CAUCA NORTE","M113 B/G SANTANDER DE QUILICHAO 2":"ZONA CAUCA NORTE","M114 B/G POPAYAN":"ZONA CAUCA SUR","M114 B/G PATIA":"ZONA CAUCA SUR","M114 B/G EL TAMBO":"ZONA CAUCA SUR","M114 B/G ARGELIA":"ZONA CAUCA SUR","M114 B/G TIMBIO":"ZONA CAUCA SUR","M114 B/G PIENDAMO":"ZONA CAUCA SUR","M115 B/G SOTARA":"ZONA CAUCA CENTRO","M115 B/G PAEZ":"ZONA CAUCA CENTRO","M115 B/G INZA":"ZONA CAUCA CENTRO","M115 B/G SILVIA":"ZONA CAUCA CENTRO","M115 B/G TORO":"ZONA CAUCA CENTRO","M116 B/G TUNJA":"ZONA BOYACA","M116 B/G DUITAMA":"ZONA BOYACA","M116 B/G SOGAMOSO":"ZONA BOYACA","M116 B/G CHIQUINQUIRA":"ZONA BOYACA","M116 B/G MONIQUIRA":"ZONA BOYACA","M116 B/G PAIPA":"ZONA BOYACA","M116 B/G PUERTO BOYACA":"ZONA BOYACA","M117 B/G FLORENCIA":"ZONA CAQUETA","M117 B/G SAN VICENTE":"ZONA CAQUETA","M117 B/G EL DONCELLO":"ZONA CAQUETA","M117 B/G MORELIA":"ZONA CAQUETA","M117 B/G PUERTO RICO":"ZONA CAQUETA","M118 B/G BUGA":"ZONA VALLE","M118 B/G TULUA":"ZONA VALLE","M118 B/G BUGALAGRANDE":"ZONA VALLE","M118 B/G PALMIRA":"ZONA VALLE","M118 B/G YUMBO":"ZONA VALLE","M118 B/G CARTAGO":"ZONA VALLE","M118 B/G LA UNION":"ZONA VALLE","M118 B/G SEVILLA":"ZONA VALLE","M118 B/G ROLDANILLO":"ZONA VALLE","M118 B/G CAICEDONIA":"ZONA VALLE","M119 B/G PEREIRA":"ZONA EJE CAFETERO","M119 B/G MANIZALES":"ZONA EJE CAFETERO","M119 B/G DOSQUEBRADAS":"ZONA EJE CAFETERO","M119 B/G SANTA ROSA DE CABAL":"ZONA EJE CAFETERO","M119 B/G CHINCHINA":"ZONA EJE CAFETERO","M119 B/G FILANDIA":"ZONA EJE CAFETERO","M119 B/G SALAMINA":"ZONA EJE CAFETERO","M120 B/G IBAGUE":"ZONA TOLIMA","M120 B/G ESPINAL":"ZONA TOLIMA","M120 B/G MELGAR":"ZONA TOLIMA","M120 B/G HONDA":"ZONA TOLIMA","M120 B/G LIBANO":"ZONA TOLIMA","M120 B/G MURILLO":"ZONA TOLIMA","M120 B/G LERIDA":"ZONA TOLIMA","M120 B/G AMBALEMA":"ZONA TOLIMA","M121 B/G SANTA MARTA":"ZONA COSTA NORTE","M121 B/G BARRANQUILLA":"ZONA COSTA NORTE","M121 B/G CARTAGENA":"ZONA COSTA NORTE","M121 B/G SOLEDAD":"ZONA COSTA NORTE","M121 B/G VALLEDUPAR":"ZONA COSTA NORTE","M121 B/G SINCELEJO":"ZONA COSTA NORTE","M121 B/G MONTERIA":"ZONA COSTA NORTE","M111 B/G USAQUEN":"ZONA CUNDINAMARCA","M111 B/G SUBA":"ZONA CUNDINAMARCA","M111 B/G ENGATIVA":"ZONA CUNDINAMARCA","M111 B/G BARRIOS UNIDOS":"ZONA CUNDINAMARCA","M111 B/G TEUSAQUILLO":"ZONA CUNDINAMARCA","M111 B/G LOS MARTIRES":"ZONA CUNDINAMARCA","M111 B/G PUENTE ARANDA":"ZONA CUNDINAMARCA","M111 B/G KENNEDY":"ZONA CUNDINAMARCA","M111 B/G FONTIBON":"ZONA CUNDINAMARCA","M111 B/G RAFAEL URIBE":"ZONA CUNDINAMARCA","M111 B/G SAN CRISTOBAL":"ZONA CUNDINAMARCA","M111 B/G BOSA":"ZONA CUNDINAMARCA","M111 B/G TUNJUELITO":"ZONA CUNDINAMARCA","M111 B/G ANTONIO NARIÑO":"ZONA CUNDINAMARCA","M111 B/G USME":"ZONA CUNDINAMARCA","M111 B/G RAFAEL URIBE URIBE":"ZONA CUNDINAMARCA","B/G PRINCIPAL":"BODEGA","B/G BODEGA PRINCIPAL":"BODEGA","B/G CEDI BOGOTA":"BODEGA","B/G CEDI":"BODEGA","B/G BODEGA VIRTUAL":"BODEGA VIRTUAL","B/G BODEGA VALLE":"BODEGA VALLE","B/G CERRADA":"CERRADA","B/G LOCAL":"LOCAL Y ACTIVOS","B/G ACTIVOS":"LOCAL Y ACTIVOS"};
+const BODEGA_ZONA_MAP = {"M111 B/G SAN MIGUEL":"ZONA CUNDINAMARCA","M111 B/G CHOACHI":"ZONA CUNDINAMARCA","M111 B/G CHIA":"ZONA CUNDINAMARCA","M111 B/G SOPO":"ZONA CUNDINAMARCA","M111 B/G CAJICA":"ZONA CUNDINAMARCA","M111 B/G COTA":"ZONA CUNDINAMARCA","M111 B/G FACATATIVA":"ZONA CUNDINAMARCA","M111 B/G MOSQUERA":"ZONA CUNDINAMARCA","M111 B/G MADRID":"ZONA CUNDINAMARCA","M111 B/G FUNZA":"ZONA CUNDINAMARCA","M111 B/G LA CALERA":"ZONA CUNDINAMARCA","M111 B/G SOACHA":"ZONA CUNDINAMARCA","M111 B/G ZIPAQUIRA":"ZONA CUNDINAMARCA","M111 B/G SIBATE":"ZONA CUNDINAMARCA","M111 B/G BOGOTA":"ZONA CUNDINAMARCA","M112 B/G IPIALES":"ZONA NARIÑO","M112 B/G TUMACO":"ZONA NARIÑO","M112 B/G TUQUERRES":"ZONA NARIÑO","M112 B/G PASTO":"ZONA NARIÑO","M112 B/G SAMANIEGO":"ZONA NARIÑO","M112 B/G LA UNION":"ZONA NARIÑO","M112 B/G ILLANO":"ZONA NARIÑO","M113 B/G SANTANDER DE QUILICHAO":"ZONA CAUCA NORTE","M113 B/G PUERTO TEJADA":"ZONA CAUCA NORTE","M113 B/G CALOTO":"ZONA CAUCA NORTE","M113 B/G PADILLA":"ZONA CAUCA NORTE","M113 B/G VILLARRICA":"ZONA CAUCA NORTE","M113 B/G SANTANDER DE QUILICHAO 2":"ZONA CAUCA NORTE","M114 B/G POPAYAN":"ZONA CAUCA SUR","M114 B/G PATIA":"ZONA CAUCA SUR","M114 B/G EL TAMBO":"ZONA CAUCA SUR","M114 B/G ARGELIA":"ZONA CAUCA SUR","M114 B/G TIMBIO":"ZONA CAUCA SUR","M114 B/G PIENDAMO":"ZONA CAUCA SUR","M115 B/G SOTARA":"ZONA CAUCA CENTRO","M115 B/G PAEZ":"ZONA CAUCA CENTRO","M115 B/G INZA":"ZONA CAUCA CENTRO","M115 B/G SILVIA":"ZONA CAUCA CENTRO","M115 B/G TORO":"ZONA CAUCA CENTRO","M116 B/G TUNJA":"ZONA BOYACA","M116 B/G DUITAMA":"ZONA BOYACA","M116 B/G SOGAMOSO":"ZONA BOYACA","M116 B/G CHIQUINQUIRA":"ZONA BOYACA","M116 B/G MONIQUIRA":"ZONA BOYACA","M116 B/G PAIPA":"ZONA BOYACA","M116 B/G PUERTO BOYACA":"ZONA BOYACA","M117 B/G FLORENCIA":"ZONA CAQUETA","M117 B/G SAN VICENTE":"ZONA CAQUETA","M117 B/G EL DONCELLO":"ZONA CAQUETA","M117 B/G MORELIA":"ZONA CAQUETA","M117 B/G PUERTO RICO":"ZONA CAQUETA","M118 B/G BUGA":"ZONA VALLE","M118 B/G TULUA":"ZONA VALLE","M118 B/G BUGALAGRANDE":"ZONA VALLE","M118 B/G PALMIRA":"ZONA VALLE","M118 B/G YUMBO":"ZONA VALLE","M118 B/G CARTAGO":"ZONA VALLE","M118 B/G LA UNION":"ZONA VALLE","M118 B/G SEVILLA":"ZONA VALLE","M118 B/G ROLDANILLO":"ZONA VALLE","M118 B/G CAICEDONIA":"ZONA VALLE","M119 B/G PEREIRA":"ZONA EJE CAFETERO","M119 B/G MANIZALES":"ZONA EJE CAFETERO","M119 B/G DOSQUEBRADAS":"ZONA EJE CAFETERO","M119 B/G SANTA ROSA DE CABAL":"ZONA EJE CAFETERO","M119 B/G CHINCHINA":"ZONA EJE CAFETERO","M119 B/G FILANDIA":"ZONA EJE CAFETERO","M119 B/G SALAMINA":"ZONA EJE CAFETERO","M120 B/G IBAGUE":"ZONA TOLIMA","M120 B/G ESPINAL":"ZONA TOLIMA","M120 B/G MELGAR":"ZONA TOLIMA","M120 B/G HONDA":"ZONA TOLIMA","M120 B/G LIBANO":"ZONA TOLIMA","M120 B/G MURILLO":"ZONA TOLIMA","M120 B/G LERIDA":"ZONA TOLIMA","M120 B/G AMBALEMA":"ZONA TOLIMA","M121 B/G SANTA MARTA":"ZONA COSTA NORTE","M121 B/G BARRANQUILLA":"ZONA COSTA NORTE","M121 B/G CARTAGENA":"ZONA COSTA NORTE","M121 B/G SOLEDAD":"ZONA COSTA NORTE","M121 B/G VALLEDUPAR":"ZONA COSTA NORTE","M121 B/G SINCELEJO":"ZONA COSTA NORTE","M121 B/G MONTERIA":"ZONA COSTA NORTE","M111 B/G USAQUEN":"ZONA CUNDINAMARCA","M111 B/G SUBA":"ZONA CUNDINAMARCA","M111 B/G ENGATIVA":"ZONA CUNDINAMARCA","M111 B/G BARRIOS UNIDOS":"ZONA CUNDINAMARCA","M111 B/G TEUSAQUILLO":"ZONA CUNDINAMARCA","M111 B/G LOS MARTIRES":"ZONA CUNDINAMARCA","M111 B/G PUENTE ARANDA":"ZONA CUNDINAMARCA","M111 B/G KENNEDY":"ZONA CUNDINAMARCA","M111 B/G FONTIBON":"ZONA CUNDINAMARCA","M111 B/G RAFAEL URIBE":"ZONA CUNDINAMARCA","M111 B/G SAN CRISTOBAL":"ZONA CUNDINAMARCA","M111 B/G BOSA":"ZONA CUNDINAMARCA","M111 B/G TUNJUELITO":"ZONA CUNDINAMARCA","M111 B/G ANTONIO NARIÑO":"ZONA CUNDINAMARCA","M111 B/G USME":"ZONA CUNDINAMARCA","M111 B/G RAFAEL URIBE URIBE":"ZONA CUNDINAMARCA","B/G PRINCIPAL":"ZONA BODEGA VIRTUAL","B/G BODEGA PRINCIPAL":"ZONA BODEGA VIRTUAL","B/G CEDI BOGOTA":"ZONA BODEGA VIRTUAL","B/G CEDI":"ZONA BODEGA VIRTUAL","B/G BODEGA VIRTUAL":"ZONA BODEGA VIRTUAL","B/G BODEGA VALLE":"ZONA BODEGA VALLE"};
 
 const ZONAS_LISTA = [
-  'ZONA CUNDINAMARCA', 'ZONA NARIÑO', 'ZONA CAUCA NORTE', 'ZONA CAUCA SUR',
-  'ZONA CAUCA CENTRO', 'ZONA BOYACA', 'ZONA CAQUETA', 'ZONA VALLE',
-  'ZONA EJE CAFETERO', 'ZONA TOLIMA', 'ZONA COSTA NORTE', 'BODEGA',
-  'BODEGA VALLE', 'BODEGA VIRTUAL', 'CERRADA', 'LOCAL Y ACTIVOS'
+  'ZONA CAUCA NORTE', 'ZONA CAUCA SUR', 'ZONA CAUCA CENTRO', 'ZONA VALLE',
+  'ZONA TOLIMA', 'ZONA EJE CAFETERO', 'ZONA NARIÑO', 'ZONA CUNDINAMARCA',
+  'ZONA CAQUETA', 'ZONA COSTA NORTE', 'ZONA BOYACA',
+  'ZONA BODEGA VIRTUAL', 'ZONA BODEGA VALLE'
 ];
 
 function zonaDeBodega(nombreBodega) {
@@ -359,7 +380,9 @@ async function cargarDatos() {
       recepcion: local.recepcion || [], novedades: local.novedades || [],
       inventario: local.inventario || [], facturacion: local.facturacion || [],
       seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-      trasladosConsulta: local.trasladosConsulta || []
+      trasladosConsulta: local.trasladosConsulta || [],
+      asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
+      despachoAsignacion: local.despachoAsignacion || []
     };
     $('estadoApi').className = 'badge bg-warning text-dark';
     $('estadoApi').textContent = 'Sin URL de Web App';
@@ -371,7 +394,9 @@ async function cargarDatos() {
       recepcion: local.recepcion || [], novedades: local.novedades || [],
       inventario: local.inventario || [], facturacion: local.facturacion || [],
       seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-      trasladosConsulta: local.trasladosConsulta || []
+      trasladosConsulta: local.trasladosConsulta || [],
+      asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
+      despachoAsignacion: local.despachoAsignacion || []
     };
     $('estadoApi').className = 'badge bg-secondary';
     $('estadoApi').textContent = 'Modo local';
@@ -393,7 +418,9 @@ async function cargarDatos() {
         recepcion: local.recepcion || [], novedades: local.novedades || [],
         inventario: local.inventario || [], facturacion: local.facturacion || [],
         seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-        trasladosConsulta: local.trasladosConsulta || []
+        trasladosConsulta: local.trasladosConsulta || [],
+        asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
+        despachoAsignacion: local.despachoAsignacion || []
       };
       console.warn(e);
     }
@@ -459,6 +486,39 @@ async function probarConexion() {
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '&#127760; Probar Conexion'; }
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * 2b. CALCULO DE TIEMPOS CRUZANDO FUENTES POR DOCUMENTO TRASLADO
+ * ------------------------------------------------------------------------- */
+/** Alistamiento = timestamp(BD_ASIGNACION) - timestamp(BD_ENTREGA_A_LOGISTICA)
+ *  Match por Documento Traslado normalizado */
+function calcularAlistamiento(claveTraslado) {
+  const filaAsignacion = FUENTES.asignacion.find(f =>
+    normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado)) === claveTraslado
+  );
+  const filaEntrega = FUENTES.entregaLogistica.find(f =>
+    normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado)) === claveTraslado
+  );
+  if (!filaAsignacion || !filaEntrega) return null;
+  const tsAsignacion = obtenerValorPorNombreColumna(filaAsignacion, A.marca);
+  const tsEntrega = obtenerValorPorNombreColumna(filaEntrega, A.marca);
+  return horasEntre(tsEntrega, tsAsignacion);
+}
+
+/** Espera Despacho = timestamp(BD_ENTREGA_A_LOGISTICA) - timestamp(Despacho y asignacion)
+ *  Match por Documento Traslado normalizado */
+function calcularEsperaDespacho(claveTraslado) {
+  const filaEntrega = FUENTES.entregaLogistica.find(f =>
+    normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado)) === claveTraslado
+  );
+  const filaDespacho = FUENTES.despachoAsignacion.find(f =>
+    normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado)) === claveTraslado
+  );
+  if (!filaEntrega || !filaDespacho) return null;
+  const tsEntrega = obtenerValorPorNombreColumna(filaEntrega, A.marca);
+  const tsDespacho = obtenerValorPorNombreColumna(filaDespacho, A.marca);
+  return horasEntre(tsDespacho, tsEntrega);
 }
 
 /* ---------------------------------------------------------------------------
@@ -529,8 +589,8 @@ function construirConsolidado() {
       estado,
       tieneNovedad: !!nov,
       novedadResuelta: nov ? normalizarCabecera(obtenerValorPorNombreColumna(nov, A.solucionado)) : '',
-      tAlistamiento: horasEntre(marca, fEntregaLog),
-      tEsperaDespacho: horasEntre(fEntregaLog, fPlanilla),
+      tAlistamiento: calcularAlistamiento(clave),
+      tEsperaDespacho: calcularEsperaDespacho(clave),
       tTransito: horasEntre(fPlanilla, fRecibido),
       /* Campos enriquecidos */
       quienAlisto,
@@ -594,15 +654,44 @@ function trasladosFiltrados() {
 }
 
 function urgenteEnRiesgo(t) {
-  return esSi(t.urgente) && t.estado !== 'CUMPLIDO';
+  if (t.estado === 'CUMPLIDO') return false;
+  if (esSi(t.urgente)) return true;
+  // Also flag as risk when Concepto matches urgent categories
+  const concepto = (t.concepto || '').toString().trim();
+  const conceptoNorm = normalizarCabecera(concepto);
+  const conceptosUrgentes = ['pqrs', 'tutela', 'tutelas', 'desacato', 'orden de arresto', 'jornada'];
+  return conceptosUrgentes.some(c => conceptoNorm === c);
 }
 
 /* ---------------------------------------------------------------------------
  * 5. INDICADORES (KPIs) Y TIEMPOS POR PROCESO
  * ------------------------------------------------------------------------- */
 function pintarKpis(lista) {
-  const cumplidos = lista.filter(t => t.estado === 'CUMPLIDO').length;
-  const pendientes = lista.filter(t => t.estado !== 'CUMPLIDO').length;
+  // TRASLADOS: Count unique traslado numbers from ALL files in Drive folder
+  const trasladosUnicos = new Set();
+  FUENTES.trasladosConsulta.forEach(f => {
+    const clave = normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado));
+    if (clave) trasladosUnicos.add(clave);
+  });
+  const totalTraslados = trasladosUnicos.size || lista.length;
+
+  // CUMPLIDOS: Count unique Documento Traslado with asignacion from BD_ASIGNACION_DE_TRASLADO
+  const cumplidosUnicos = new Set();
+  FUENTES.asignacion.forEach(f => {
+    const clave = normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado));
+    if (clave) cumplidosUnicos.add(clave);
+  });
+  const cumplidos = cumplidosUnicos.size || lista.filter(t => t.estado === 'CUMPLIDO').length;
+
+  // EN TRANSITO / PENDIENTES: unique Documento Traslado planillados/en transito from Despacho sheet
+  const enTransitoUnicos = new Set();
+  FUENTES.despachoAsignacion.forEach(f => {
+    const clave = normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado));
+    if (clave) enTransitoUnicos.add(clave);
+  });
+  const pendientes = enTransitoUnicos.size || lista.filter(t => t.estado !== 'CUMPLIDO').length;
+
+  // URGENTES EN RIESGO: filter by Concepto = PQRS, Tutelas/Tutela, Desacato, Orden de Arresto, Jornada
   const urgentes = lista.filter(urgenteEnRiesgo).length;
 
   const novedades = FUENTES.novedades.filter(n => dentroDeRango(obtenerValorPorNombreColumna(n, A.marca)));
@@ -611,15 +700,16 @@ function pintarKpis(lista) {
   const inv = inventarioFiltrado();
   const difInv = inv.filter(i => Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) !== 0).length;
 
-  $('kpi_total').textContent = lista.length;
+  $('kpi_total').textContent = totalTraslados;
   $('kpi_cumplidos').textContent = cumplidos;
-  $('kpi_cumplimiento').textContent = (lista.length ? Math.round(cumplidos * 100 / lista.length) : 0) + '% de cumplimiento';
+  $('kpi_cumplimiento').textContent = (totalTraslados ? Math.round(cumplidos * 100 / totalTraslados) : 0) + '% de cumplimiento';
   $('kpi_pendientes').textContent = pendientes;
   $('kpi_urgentes').textContent = urgentes;
   $('kpi_novedades').textContent = novedades.length;
   $('kpi_novedades_abiertas').textContent = abiertas + ' sin solucionar';
   $('kpi_dif_inv').textContent = difInv;
 
+  // Tiempos promedio calculados cruzando fuentes por Documento Traslado
   const pAlist = promedio(lista.map(t => t.tAlistamiento));
   const pEspera = promedio(lista.map(t => t.tEsperaDespacho));
   const pTransito = promedio(lista.map(t => t.tTransito));
@@ -651,20 +741,26 @@ function pintarGraficas(lista, pAlist, pEspera, pTransito) {
 
   dibujarDona('chartEstados', estadosActivos, datosEstados, bgEstados, totalEstados);
 
-  /* ── Gráfica 2: Traslados por zona (Barras) ── */
+  /* ── Gráfica 2: Traslados por zona (Barras) — 13 zonas definidas ── */
+  const ZONAS_13 = [
+    'ZONA CAUCA NORTE', 'ZONA CAUCA SUR', 'ZONA CAUCA CENTRO', 'ZONA VALLE',
+    'ZONA TOLIMA', 'ZONA EJE CAFETERO', 'ZONA NARIÑO', 'ZONA CUNDINAMARCA',
+    'ZONA CAQUETA', 'ZONA COSTA NORTE', 'ZONA BOYACA',
+    'ZONA BODEGA VIRTUAL', 'ZONA BODEGA VALLE'
+  ];
   const porZona = {};
+  ZONAS_13.forEach(z => { porZona[z] = 0; });
   lista.forEach(t => { const z = t.zona || 'SIN ZONA'; porZona[z] = (porZona[z] || 0) + 1; });
-  // Ordenar por conteo descendente
-  const zonasOrdenadas = Object.entries(porZona)
-    .sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => ({ zona: k, conteo: v }));
-  const labelsZona = zonasOrdenadas.map(z => z.zona);
-  const datosZona = zonasOrdenadas.map(z => z.conteo);
+  // Ordenar: primero las 13 zonas definidas (por conteo descendente), luego zonas fuera de lista
+  const zonasDefinidas = ZONAS_13.filter(z => porZona[z] > 0).sort((a, b) => porZona[b] - porZona[a]);
+  const zonasExtra = Object.keys(porZona).filter(z => !ZONAS_13.includes(z) && porZona[z] > 0).sort((a, b) => porZona[b] - porZona[a]);
+  const labelsZona = [...zonasDefinidas, ...zonasExtra];
+  const datosZona = labelsZona.map(z => porZona[z]);
   // Colores distintos por zona
   const coloresZona = [
     '#0d6efd', '#198754', '#6f42c1', '#d63384', '#fd7e14',
     '#20c997', '#0dcaf0', '#ffc107', '#dc3545', '#6c757d',
-    '#491078', '#0b5ed7', '#479f40', '#c74282'
+    '#491078', '#0b5ed7', '#479f40'
   ];
   const bgZona = labelsZona.map((_, i) => coloresZona[i % coloresZona.length]);
 
@@ -1129,8 +1225,8 @@ function pintarSeccion4() {
 }
 
 /* ---------------------------------------------------------------------------
- * 7. APERTURA DEL DIA — 8 GRUPOS FIJOS
- *    8 grupos fijos con miembros definidos. Sin rotacion ciclica.
+ * 7. APERTURA DEL DIA — 14 GRUPOS FIJOS (8 CEDIS + 6 B09)
+ *    14 grupos fijos con miembros definidos (8 CEDIS + 6 B09). Sin rotacion ciclica.
  *    Cada grupo muestra: nombre del color + lista de miembros.
  *    Grupo Gris = especial (5 miembros, asignado a B05 ALTO COSTO).
  *    Los otros 7 trios = asignados a CENDIS PRINCIPAL TULUA PARQUE INDUSTRIAL.
@@ -1144,7 +1240,13 @@ const GRUPOS_FIJOS = [
   { nombre: 'Morado',  numero: 5, color: '#D8BFD8', hex: '#6f42c1', miembros: ['Jhony Saenz', 'Natalia Galvez', 'Valentina Cano'] },
   { nombre: 'Amarillo',numero: 6, color: '#FFFACD', hex: '#ffc107', miembros: ['Liz Karime Valencia', 'Angela Vanessa Aguirre', 'Derly Yulieth Mosquera'] },
   { nombre: 'Fucsia',  numero: 7, color: '#FFD0EC', hex: '#FF00FF', miembros: ['Manuel David Salazar', 'Luz Nelly Chaves', 'Luis Felipe Marin'], lider: 'Luz Nelly Chaves' },
-  { nombre: 'Gris',    numero: 8, color: '#E0E0E0', hex: '#6c757d', miembros: ['Claudia Echeverry', 'Camila Posada', 'Angela Vera', 'Mayra Alejandra Franco', 'Andrea Vanegas'], lider: 'Andrea Vanegas' }
+  { nombre: 'Gris',    numero: 8, color: '#E0E0E0', hex: '#6c757d', miembros: ['Claudia Echeverry', 'Camila Posada', 'Angela Vera', 'Mayra Alejandra Franco', 'Andrea Vanegas'], lider: 'Andrea Vanegas' },
+  { nombre: 'Coral',   numero: 9, color: '#FF7F7F', hex: '#FF6347', miembros: ['Jose Santiago Ramirez Obando'], lider: 'Jose Santiago Ramirez Obando' },
+  { nombre: 'Celeste', numero: 10, color: '#B0E8E8', hex: '#20B2AA', miembros: ['Yuliana Andrea Quira Manquillo'], lider: 'Yuliana Andrea Quira Manquillo' },
+  { nombre: 'Lavanda', numero: 11, color: '#E6E6FA', hex: '#9370DB', miembros: ['Luisa Fernanda Garcia Orozco'], lider: 'Luisa Fernanda Garcia Orozco' },
+  { nombre: 'Oliva',   numero: 12, color: '#C8E6C8', hex: '#6B8E23', miembros: ['Nedi Yojana Zamora Yandi'], lider: 'Nedi Yojana Zamora Yandi' },
+  { nombre: 'Rosa',    numero: 13, color: '#FFD1DC', hex: '#FF69B4', miembros: ['Beatriz Eugenia Urbano Botina'], lider: 'Beatriz Eugenia Urbano Botina' },
+  { nombre: 'Bronce',  numero: 14, color: '#D4A76A', hex: '#CD853F', miembros: ['Mery Yolanda Cadavid Bermudez'], lider: 'Mery Yolanda Cadavid Bermudez' }
 ];
 
 /** Genera la lista de grupos del dia (fija, sin rotacion). */
@@ -1155,7 +1257,7 @@ function generarGruposDelDia() {
   }));
 }
 
-/** Pinta los 8 grupos fijos en el panel de Apertura del Dia */
+/** Pinta los 14 grupos fijos en el panel de Apertura del Dia */
 function pintarAperturaDia() {
   const cont = $('rot_grupos_container');
   const info = $('info_rotacion');
@@ -1177,7 +1279,7 @@ function pintarAperturaDia() {
       const header = document.createElement('div');
       header.className = 'rot-grupo-card-header';
       header.style.background = grupo.hex;
-      const lightColors = ['#FFD0EC', '#FFDAB9', '#C8F7C5', '#FFB3B3', '#D8BFD8', '#FFFACD', '#B0E0E6', '#E0E0E0'];
+      const lightColors = ['#FFD0EC', '#FFDAB9', '#C8F7C5', '#FFB3B3', '#D8BFD8', '#FFFACD', '#B0E0E6', '#E0E0E0', '#FF7F7F', '#B0E8E8', '#E6E6FA', '#C8E6C8', '#FFD1DC', '#D4A76A'];
       header.style.color = lightColors.includes(grupo.color) ? (grupo.hex === '#ffc107' ? '#000' : '#fff') : '#fff';
       // Mejor contraste: si el hex es claro, usar texto oscuro
       const isLightHex = ['#ffc107', '#FF8C00'].some(c => grupo.hex === c);
@@ -1511,6 +1613,9 @@ function pintarPerfilesVisor() {
   const perfiles = CONFIG.perfiles || {};
   const LABELS = {
     despachos: 'Despachos (BD_PLANILLA_ENTREGA_DESPACHOS)',
+    asignacion: 'Asignacion de Traslados (BD_ASIGNACION_DE_TRASLADO)',
+    entregaLogistica: 'Entrega a Logistica (BD_ENTREGA_A_LOGISTICA)',
+    despachoAsignacion: 'Despacho y Asignacion de Traslados',
     logistica: 'Logistica (BD_LOGISTICA_DESPACHOS)',
     recepcion: 'Recepcion Tecnica (BD_RECEPCION_TECNICA)',
     facturacion: 'Factura Transporte (BD_FACTURA_TRANSPORTE)',
