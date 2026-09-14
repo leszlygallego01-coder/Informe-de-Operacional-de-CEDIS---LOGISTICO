@@ -10,7 +10,7 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbx5iV0F_FE6rcznYo2s9MUeZ0rNtIJ_FYuPCW8pzjpBvDCnI5Xhz0JRR6lY-nYYNus8/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwwoy9QiSaIeMaLDjpZZozyNwS9DN8tu1qvCH-FvfsGLUn0O8g1nS10Kv7ItE1Tf3hy/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -50,9 +50,9 @@ function cargarConfigVisor() {
     const raw = localStorage.getItem(LS_KEY_VISOR);
     const cfg = raw ? Object.assign({}, VISOR_DEFAULTS, JSON.parse(raw)) : Object.assign({}, VISOR_DEFAULTS);
     if (!cfg.apiUrl || cfg.apiUrl.trim() === '') cfg.apiUrl = VISOR_API_URL;
-    /* v3.6: Forzar actualizacion de URL si la guardada es diferente a la nueva por defecto */
+    /* v3.8: Forzar actualizacion de URL si la guardada es diferente a la nueva por defecto */
     if (cfg.apiUrl && cfg.apiUrl.trim() !== '' && cfg.apiUrl.trim() !== VISOR_API_URL.trim()) {
-      console.log('[VISOR] Actualizando URL del Web App a la nueva version v3.6');
+      console.log('[VISOR] Actualizando URL del Web App a la nueva version v3.8');
       cfg.apiUrl = VISOR_API_URL;
     }
     if (cfg.apiUrl && cfg.apiUrl.trim() !== '' && cfg.modoLocal) {
@@ -319,13 +319,13 @@ function zonaDeBodega(nombreBodega) {
 /* ---------------------------------------------------------------------------
  * 2. CARGA DE DATOS (Drive via Web App, o datos locales del modulo de Cargue)
  * ------------------------------------------------------------------------- */
-async function api(action, payload = {}) {
+async function api(action, payload = {}, timeoutMs = 8000) {
   if (!CONFIG.apiUrl) throw new Error('No se ha configurado la URL de la Web App.');
   const fullPayload = Object.assign({ action }, payload);
   console.log('[api] Enviando:', action, fullPayload);
 
-  // Helper: fetch con timeout (30s)
-  function fetchWithTimeout(url, options, ms = 30000) {
+  // Helper: fetch con timeout configurable (default 8s para cache-only)
+  function fetchWithTimeout(url, options, ms) {
     return Promise.race([
       fetch(url, options),
       new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), ms))
@@ -339,7 +339,7 @@ async function api(action, payload = {}) {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       redirect: 'follow',
       body: JSON.stringify(fullPayload)
-    });
+    }, timeoutMs);
     const ct = res.headers.get('Content-Type') || '';
     console.log('[api] POST respuesta status:', res.status, 'Content-Type:', ct);
     if (ct.includes('text/html')) {
@@ -361,24 +361,24 @@ async function api(action, payload = {}) {
     if (e.message === 'AUTH_REQUIRED') {
       throw new Error('La Web App requiere autenticacion. Desplieguela con acceso "Cualquier usuario" (publico).');
     }
-    // Timeout — no reintentar, reportar
+    // Timeout — no reintentar via GET, reportar directamente
     if (e.message === 'TIMEOUT') {
-      throw new Error('La Web App no respondio en 30 segundos. Puede que el backend tarde demasiado leyendo multiples fuentes. Intente de nuevo o use modo local.');
+      throw new Error('TIMEOUT');
     }
     // Network/CORS error — reintentar con GET
     if (e.message && (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))) {
       console.log('[api] POST fallo, reintentando con GET...');
       try {
-        return await apiGetFallback(fullPayload);
+        return await apiGetFallback(fullPayload, timeoutMs);
       } catch (e2) {
-        throw new Error('No se pudo conectar a la Web App (POST y GET fallaron). Verifique: 1) La URL es correcta, 2) La Web App esta desplegada como "Cualquier usuario" (acceso publico), 3) No hay redireccion a login de Google.');
+        throw new Error('No se pudo conectar a la Web App (POST y GET fallaron). Verifique la URL y el despliegue.');
       }
     }
     throw e;
   }
 }
 
-async function apiGetFallback(payload) {
+async function apiGetFallback(payload, timeoutMs = 8000) {
   const params = [];
   for (const key in payload) {
     if (payload.hasOwnProperty(key)) {
@@ -389,7 +389,7 @@ async function apiGetFallback(payload) {
   console.log('[api] GET fallback URL:', getUrl.substring(0, 150) + '...');
   const res = await Promise.race([
     fetch(getUrl, { method: 'GET', redirect: 'follow' }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 30000))
+    new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs))
   ]);
   const ct = res.headers.get('Content-Type') || '';
   console.log('[api] GET respuesta status:', res.status, 'Content-Type:', ct);
@@ -412,151 +412,103 @@ async function cargarDatos() {
   console.log('[cargarDatos] Iniciando carga de datos...');
   console.log('[cargarDatos] API URL:', CONFIG.apiUrl);
   console.log('[cargarDatos] Modo local:', CONFIG.modoLocal);
-  console.log('[cargarDatos] Folders:', JSON.stringify(CONFIG.folders));
   $('estadoApi').className = 'badge bg-light text-dark';
   $('estadoApi').textContent = 'Cargando...';
 
-  // Timeout global: si en 45s no hay respuesta, usar datos locales
-  let timeoutId = setTimeout(() => {
-    console.warn('[cargarDatos] TIMEOUT global (45s) — forzando modo local');
-    $('estadoApi').className = 'badge bg-warning text-dark';
-    $('estadoApi').textContent = 'Timeout API';
-    toast('La Web App no respondio en 45s. Usando datos locales.', 'warning');
-    const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
-    FUENTES = {
-      despachos: local.despachos || [], logistica: local.logistica || [],
-      recepcion: local.recepcion || [], novedades: local.novedades || [],
-      inventario: local.inventario || [], facturacion: local.facturacion || [],
-      seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-      trasladosConsulta: local.trasladosConsulta || [],
-      asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
-      despachoAsignacion: local.despachoAsignacion || []
-    };
-    construirConsolidado();
-    poblarFiltros();
-    refrescarTodo();
-  }, 45000);
-
   if (!CONFIG.apiUrl) {
-    clearTimeout(timeoutId);
-    const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
-    FUENTES = {
-      despachos: local.despachos || [], logistica: local.logistica || [],
-      recepcion: local.recepcion || [], novedades: local.novedades || [],
-      inventario: local.inventario || [], facturacion: local.facturacion || [],
-      seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-      trasladosConsulta: local.trasladosConsulta || [],
-      asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
-      despachoAsignacion: local.despachoAsignacion || []
-    };
+    _cargarFuentesLocales();
     $('estadoApi').className = 'badge bg-warning text-dark';
     $('estadoApi').textContent = 'Sin URL de Web App';
     toast('Configure la URL de la Web App en Ajustes para leer datos de Drive.', 'warning');
-  } else if (CONFIG.modoLocal) {
-    clearTimeout(timeoutId);
-    const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
-    FUENTES = {
-      despachos: local.despachos || [], logistica: local.logistica || [],
-      recepcion: local.recepcion || [], novedades: local.novedades || [],
-      inventario: local.inventario || [], facturacion: local.facturacion || [],
-      seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-      trasladosConsulta: local.trasladosConsulta || [],
-      asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
-      despachoAsignacion: local.despachoAsignacion || []
-    };
+    construirConsolidado(); poblarFiltros(); refrescarTodo();
+    return;
+  }
+
+  if (CONFIG.modoLocal) {
+    _cargarFuentesLocales();
     $('estadoApi').className = 'badge bg-secondary';
     $('estadoApi').textContent = 'Modo local';
-  } else {
-    // PASO 1: Ping rapido para verificar que la API es alcanzable
+    construirConsolidado(); poblarFiltros(); refrescarTodo();
+    return;
+  }
+
+  // ── MODO API (cache-only): el backend ya NO lee Drive en tiempo real ──
+  // consolidadoVisor() solo lee de CacheService / BD_CONSOLIDADO → <2s respuesta
+
+  const RETRY_DELAYS = [1000, 3000, 5000]; // backoff progresivo
+  let intento = 0;
+  let exito = false;
+
+  while (intento <= RETRY_DELAYS.length && !exito) {
     try {
-      console.log('[cargarDatos] Verificando conexion con ping...');
-      const pingUrl = CONFIG.apiUrl + '?action=ping&_t=' + Date.now();
-      const pingRes = await Promise.race([
-        fetch(pingUrl, { method: 'GET', redirect: 'follow' }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000))
-      ]);
-      const pingCt = pingRes.headers.get('Content-Type') || '';
-      if (pingCt.includes('text/html')) {
-        clearTimeout(timeoutId);
-        console.error('[cargarDatos] Ping devuelve HTML — la Web App requiere autenticacion');
+      intento++;
+      if (intento === 1) {
+        console.log('[cargarDatos] Intento 1: llamando consolidadoVisor (cache-only)...');
+        $('estadoApi').textContent = 'Leyendo caché...';
+      } else {
+        console.log('[cargarDatos] Reintento ' + intento + ' (espera ' + RETRY_DELAYS[intento - 2] + 'ms)...');
+        $('estadoApi').textContent = 'Reintentando (' + intento + ')...';
+        await new Promise(r => setTimeout(r, RETRY_DELAYS[intento - 2]));
+      }
+
+      const r = await api('consolidadoVisor', {}, 8000);
+
+      if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
+        console.log('[cargarDatos] ¡Datos recibidos! Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
+        Object.keys(FUENTES).forEach(m => {
+          FUENTES[m] = (r.fuentes[m] && r.fuentes[m].rows) ? r.fuentes[m].rows : [];
+        });
+        const conteo = {};
+        Object.keys(FUENTES).forEach(m => { conteo[m] = FUENTES[m].length; });
+        console.log('[cargarDatos] Filas por fuente:', conteo);
+        $('estadoApi').className = 'badge bg-success';
+        $('estadoApi').textContent = r.origen === 'hoja' ? 'Caché (hoja)' : 'Caché OK';
+        // Guardar en localStorage como backup
+        const backup = {};
+        Object.keys(FUENTES).forEach(m => { backup[m] = FUENTES[m]; });
+        try { localStorage.setItem(LS_DATA_CARGUE, JSON.stringify(backup)); } catch (eLS) {}
+        exito = true;
+      } else if (r.ok === false && r.error && r.error.indexOf('Consolidado no disponible') !== -1) {
+        // Cache vacía — trigger aún no ha ejecutado actualizarConsolidadoCache
+        console.warn('[cargarDatos] Caché vacía (intento ' + intento + '):', r.error);
+        $('estadoApi').className = 'badge bg-info text-dark';
+        $('estadoApi').textContent = 'Caché vacía (' + intento + ')';
+        if (intento > RETRY_DELAYS.length) {
+          toast('La caché del consolidado aún no está disponible. Ejecutar <code>actualizarConsolidadoCache()</code> manualmente en el editor de Apps Script, o espere ~10 min al trigger.', 'warning', 8000);
+        }
+      } else {
+        console.warn('[cargarDatos] Respuesta inesperada:', r);
+        break; // no reintentar en errores lógicos
+      }
+    } catch (e) {
+      console.error('[cargarDatos] Error en intento ' + intento + ':', e.message);
+      if (e.message === 'TIMEOUT' && intento <= RETRY_DELAYS.length) {
+        // Timeout corto → reintentar con backoff
+        $('estadoApi').className = 'badge bg-warning text-dark';
+        $('estadoApi').textContent = 'Timeout (' + intento + ')';
+        continue;
+      }
+      if (e.message === 'AUTH_REQUIRED') {
         $('estadoApi').className = 'badge bg-danger';
         $('estadoApi').textContent = 'Sin acceso (Auth)';
         toast('<strong>La Web App requiere autenticacion.</strong> Desplieguela con acceso "Cualquier usuario" (publico).', 'danger');
-        const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
-        FUENTES = {
-          despachos: local.despachos || [], logistica: local.logistica || [],
-          recepcion: local.recepcion || [], novedades: local.novedades || [],
-          inventario: local.inventario || [], facturacion: local.facturacion || [],
-          seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-          trasladosConsulta: local.trasladosConsulta || [],
-          asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
-          despachoAsignacion: local.despachoAsignacion || []
-        };
-        construirConsolidado(); poblarFiltros(); refrescarTodo();
-        return;
+        break;
       }
-      try {
-        const pingData = JSON.parse(await pingRes.text());
-        if (!pingData || !pingData.ok) {
-          console.warn('[cargarDatos] Ping no devuelve ok — posible problema');
-        } else {
-          console.log('[cargarDatos] Ping OK — procediendo con consolidadoVisor');
-        }
-      } catch (jsonErr) {
-        console.warn('[cargarDatos] Ping respuesta no es JSON — posible redireccion:', jsonErr.message);
-      }
-    } catch (pingErr) {
-      clearTimeout(timeoutId);
-      console.error('[cargarDatos] Ping fallo:', pingErr.message);
+      // Error de red u otro → no reintentar
       $('estadoApi').className = 'badge bg-danger';
-      $('estadoApi').textContent = pingErr.message === 'TIMEOUT' ? 'API sin respuesta' : 'Sin conexion';
-      toast('No se pudo alcanzar la Web App: ' + pingErr.message + '. Usando datos locales.', 'danger');
-      const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
-      FUENTES = {
-        despachos: local.despachos || [], logistica: local.logistica || [],
-        recepcion: local.recepcion || [], novedades: local.novedades || [],
-        inventario: local.inventario || [], facturacion: local.facturacion || [],
-        seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-        trasladosConsulta: local.trasladosConsulta || [],
-        asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
-        despachoAsignacion: local.despachoAsignacion || []
-      };
-      construirConsolidado(); poblarFiltros(); refrescarTodo();
-      return;
+      $('estadoApi').textContent = 'Error de conexión';
+      toast('Error al conectar: ' + e.message, 'danger');
+      break;
     }
+  }
 
-    // PASO 2: Llamar consolidadoVisor (solo si ping fue OK)
-    try {
-      console.log('[cargarDatos] Llamando api(consolidadoVisor)...');
-      $('estadoApi').textContent = 'Leyendo Drive...';
-      const r = await api('consolidadoVisor', { folderIds: CONFIG.folders });
-      clearTimeout(timeoutId);
-      console.log('[cargarDatos] Respuesta recibida. Fuentes:', Object.keys(r.fuentes || {}));
-      Object.keys(FUENTES).forEach(m => {
-        FUENTES[m] = (r.fuentes[m] && r.fuentes[m].rows) ? r.fuentes[m].rows : [];
-      });
-      // Contar filas por fuente
-      const conteo = {};
-      Object.keys(FUENTES).forEach(m => { conteo[m] = FUENTES[m].length; });
-      console.log('[cargarDatos] Filas por fuente:', conteo);
-      $('estadoApi').className = 'badge bg-success';
-      $('estadoApi').textContent = 'Conectado a Drive';
-    } catch (e) {
-      clearTimeout(timeoutId);
-      console.error('[cargarDatos] Error:', e.message);
-      $('estadoApi').className = 'badge bg-danger';
-      $('estadoApi').textContent = 'Error de conexion';
-      toast('Error al conectar con Drive: ' + e.message + '. Usando datos locales.', 'danger');
-      const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
-      FUENTES = {
-        despachos: local.despachos || [], logistica: local.logistica || [],
-        recepcion: local.recepcion || [], novedades: local.novedades || [],
-        inventario: local.inventario || [], facturacion: local.facturacion || [],
-        seguridad: local.seguridad || [], rotacion: local.rotacion || [],
-        trasladosConsulta: local.trasladosConsulta || [],
-        asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
-        despachoAsignacion: local.despachoAsignacion || []
-      };
+  if (!exito) {
+    console.log('[cargarDatos] Usando datos locales como fallback');
+    _cargarFuentesLocales();
+    $('estadoApi').className = 'badge bg-warning text-dark';
+    $('estadoApi').textContent = 'Datos locales';
+    if (!CONFIG.modoLocal) {
+      toast('No se pudo obtener datos del caché. Mostrando datos de la sesión anterior.', 'warning');
     }
   }
 
@@ -564,6 +516,20 @@ async function cargarDatos() {
   poblarFiltros();
   refrescarTodo();
   console.log('[cargarDatos] Carga completada.');
+}
+
+/** Carga FUENTES desde localStorage */
+function _cargarFuentesLocales() {
+  const local = JSON.parse(localStorage.getItem(LS_DATA_CARGUE) || '{}');
+  FUENTES = {
+    despachos: local.despachos || [], logistica: local.logistica || [],
+    recepcion: local.recepcion || [], novedades: local.novedades || [],
+    inventario: local.inventario || [], facturacion: local.facturacion || [],
+    seguridad: local.seguridad || [], rotacion: local.rotacion || [],
+    trasladosConsulta: local.trasladosConsulta || [],
+    asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
+    despachoAsignacion: local.despachoAsignacion || []
+  };
 }
 
 async function probarConexion() {
