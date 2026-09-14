@@ -10,7 +10,7 @@
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 const LS_DATA_CARGUE = 'MF_DATOS_SESION';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwwoy9QiSaIeMaLDjpZZozyNwS9DN8tu1qvCH-FvfsGLUn0O8g1nS10Kv7ItE1Tf3hy/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwAN2KOVntoaPlM51dyRCjN-oY2lRCCV4k1m_xkaMQ5l6saLyeNIsLECtS4OpcBpazr/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -432,83 +432,92 @@ async function cargarDatos() {
     return;
   }
 
-  // ── MODO API (cache-only): el backend ya NO lee Drive en tiempo real ──
-  // consolidadoVisor() solo lee de CacheService / BD_CONSOLIDADO → <2s respuesta
+  // ── MODO API: estrategia de 2 fases ──
+  // FASE 1: Intentar leer de caché (timeout corto 8s) — la respuesta normal <2s
+  // FASE 2: Si caché vacía, backend lee Drive directamente (timeout largo 60s)
+  //         Esto solo pasa en la primera carga antes de que el trigger corra
 
-  const RETRY_DELAYS = [1000, 3000, 5000]; // backoff progresivo
-  let intento = 0;
   let exito = false;
 
-  while (intento <= RETRY_DELAYS.length && !exito) {
-    try {
-      intento++;
-      if (intento === 1) {
-        console.log('[cargarDatos] Intento 1: llamando consolidadoVisor (cache-only)...');
-        $('estadoApi').textContent = 'Leyendo caché...';
-      } else {
-        console.log('[cargarDatos] Reintento ' + intento + ' (espera ' + RETRY_DELAYS[intento - 2] + 'ms)...');
-        $('estadoApi').textContent = 'Reintentando (' + intento + ')...';
-        await new Promise(r => setTimeout(r, RETRY_DELAYS[intento - 2]));
-      }
+  // ── FASE 1: Intento rápido de caché ──
+  try {
+    console.log('[cargarDatos] FASE 1: Leyendo caché (timeout 8s)...');
+    $('estadoApi').textContent = 'Leyendo caché...';
+    const r = await api('consolidadoVisor', {}, 8000);
 
-      const r = await api('consolidadoVisor', {}, 8000);
-
-      if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
-        console.log('[cargarDatos] ¡Datos recibidos! Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
-        Object.keys(FUENTES).forEach(m => {
-          FUENTES[m] = (r.fuentes[m] && r.fuentes[m].rows) ? r.fuentes[m].rows : [];
-        });
-        const conteo = {};
-        Object.keys(FUENTES).forEach(m => { conteo[m] = FUENTES[m].length; });
-        console.log('[cargarDatos] Filas por fuente:', conteo);
-        $('estadoApi').className = 'badge bg-success';
-        $('estadoApi').textContent = r.origen === 'hoja' ? 'Caché (hoja)' : 'Caché OK';
-        // Guardar en localStorage como backup
-        const backup = {};
-        Object.keys(FUENTES).forEach(m => { backup[m] = FUENTES[m]; });
-        try { localStorage.setItem(LS_DATA_CARGUE, JSON.stringify(backup)); } catch (eLS) {}
-        exito = true;
-      } else if (r.ok === false && r.error && r.error.indexOf('Consolidado no disponible') !== -1) {
-        // Cache vacía — trigger aún no ha ejecutado actualizarConsolidadoCache
-        console.warn('[cargarDatos] Caché vacía (intento ' + intento + '):', r.error);
-        $('estadoApi').className = 'badge bg-info text-dark';
-        $('estadoApi').textContent = 'Caché vacía (' + intento + ')';
-        if (intento > RETRY_DELAYS.length) {
-          toast('La caché del consolidado aún no está disponible. Ejecutar <code>actualizarConsolidadoCache()</code> manualmente en el editor de Apps Script, o espere ~10 min al trigger.', 'warning', 8000);
-        }
-      } else {
-        console.warn('[cargarDatos] Respuesta inesperada:', r);
-        break; // no reintentar en errores lógicos
-      }
-    } catch (e) {
-      console.error('[cargarDatos] Error en intento ' + intento + ':', e.message);
-      if (e.message === 'TIMEOUT' && intento <= RETRY_DELAYS.length) {
-        // Timeout corto → reintentar con backoff
-        $('estadoApi').className = 'badge bg-warning text-dark';
-        $('estadoApi').textContent = 'Timeout (' + intento + ')';
-        continue;
-      }
-      if (e.message === 'AUTH_REQUIRED') {
-        $('estadoApi').className = 'badge bg-danger';
-        $('estadoApi').textContent = 'Sin acceso (Auth)';
-        toast('<strong>La Web App requiere autenticacion.</strong> Desplieguela con acceso "Cualquier usuario" (publico).', 'danger');
-        break;
-      }
-      // Error de red u otro → no reintentar
+    if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
+      console.log('[cargarDatos] ✓ Caché disponible. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
+      _aplicarFuentes(r);
+      $('estadoApi').className = 'badge bg-success';
+      $('estadoApi').textContent = r.origen === 'hoja' ? 'Caché (hoja)' : r.origen === 'drive' ? 'Drive OK' : 'Caché OK';
+      exito = true;
+    } else if (r.ok && r.origen === 'drive') {
+      // TIER 3 respondió — backend leyó Drive directamente
+      console.log('[cargarDatos] ✓ Datos desde Drive (TIER 3 fallback). Fuentes:', Object.keys(r.fuentes));
+      _aplicarFuentes(r);
+      $('estadoApi').className = 'badge bg-success';
+      $('estadoApi').textContent = 'Drive OK';
+      exito = true;
+    } else if (r.ok === false || (r.fuentes && Object.keys(r.fuentes).length === 0)) {
+      // Caché vacía — pasar a FASE 2 con timeout largo
+      console.warn('[cargarDatos] Caché vacía, intentando lectura directa de Drive...');
+    } else {
+      console.warn('[cargarDatos] Respuesta inesperada en FASE 1:', r);
+    }
+  } catch (e1) {
+    console.warn('[cargarDatos] FASE 1 error:', e1.message);
+    if (e1.message === 'AUTH_REQUIRED') {
       $('estadoApi').className = 'badge bg-danger';
-      $('estadoApi').textContent = 'Error de conexión';
-      toast('Error al conectar: ' + e.message, 'danger');
-      break;
+      $('estadoApi').textContent = 'Sin acceso (Auth)';
+      toast('<strong>La Web App requiere autenticacion.</strong> Desplieguela con acceso "Cualquier usuario" (publico).', 'danger');
+    }
+  }
+
+  // ── FASE 2: Si FASE 1 no entregó datos, retry con timeout largo (Drive directo) ──
+  if (!exito) {
+    try {
+      console.log('[cargarDatos] FASE 2: Solicitando datos con timeout largo (60s) para lectura de Drive...');
+      $('estadoApi').className = 'badge bg-warning text-dark';
+      $('estadoApi').textContent = 'Leyendo Drive...';
+      toast('Cargando datos desde Drive por primera vez (puede tardar ~30s)...', 'info', 5000);
+
+      const r2 = await api('consolidadoVisor', {}, 60000);
+
+      if (r2.ok && r2.fuentes && Object.keys(r2.fuentes).length > 0) {
+        console.log('[cargarDatos] ✓ Datos recibidos en FASE 2. Fuentes:', Object.keys(r2.fuentes), 'origen:', r2.origen);
+        _aplicarFuentes(r2);
+        $('estadoApi').className = 'badge bg-success';
+        $('estadoApi').textContent = r2.origen === 'drive' ? 'Drive OK' : 'Caché OK';
+        exito = true;
+        toast('✓ Datos cargados correctamente desde Drive.', 'success', 3000);
+      } else {
+        console.error('[cargarDatos] FASE 2: respuesta sin datos:', r2);
+        $('estadoApi').className = 'badge bg-warning text-dark';
+        $('estadoApi').textContent = 'Sin datos';
+        toast('No se pudieron obtener datos ni de caché ni de Drive. Verifique que el backend tenga acceso a las carpetas.', 'warning', 8000);
+      }
+    } catch (e2) {
+      console.error('[cargarDatos] FASE 2 error:', e2.message);
+      if (e2.message === 'TIMEOUT') {
+        $('estadoApi').className = 'badge bg-warning text-dark';
+        $('estadoApi').textContent = 'Timeout Drive';
+        toast('La lectura de Drive excedió el tiempo límite. Intente de nuevo en unos minutos (el trigger actualizará la caché automáticamente).', 'warning', 8000);
+      } else if (e2.message !== 'AUTH_REQUIRED') {
+        $('estadoApi').className = 'badge bg-danger';
+        $('estadoApi').textContent = 'Error conexión';
+        toast('Error al conectar: ' + e2.message, 'danger');
+      }
     }
   }
 
   if (!exito) {
-    console.log('[cargarDatos] Usando datos locales como fallback');
+    console.log('[cargarDatos] Usando datos locales como último fallback');
     _cargarFuentesLocales();
     $('estadoApi').className = 'badge bg-warning text-dark';
     $('estadoApi').textContent = 'Datos locales';
+    const lsData = localStorage.getItem(LS_DATA_CARGUE);
     if (!CONFIG.modoLocal) {
-      toast('No se pudo obtener datos del caché. Mostrando datos de la sesión anterior.', 'warning');
+      toast('No se pudo obtener datos del servidor. Mostrando datos de sesión anterior.', 'warning');
     }
   }
 
@@ -530,6 +539,20 @@ function _cargarFuentesLocales() {
     asignacion: local.asignacion || [], entregaLogistica: local.entregaLogistica || [],
     despachoAsignacion: local.despachoAsignacion || []
   };
+}
+
+/** Aplica datos de respuesta API a FUENTES y guarda backup en localStorage */
+function _aplicarFuentes(r) {
+  Object.keys(FUENTES).forEach(m => {
+    FUENTES[m] = (r.fuentes[m] && r.fuentes[m].rows) ? r.fuentes[m].rows : [];
+  });
+  const conteo = {};
+  Object.keys(FUENTES).forEach(m => { conteo[m] = FUENTES[m].length; });
+  console.log('[_aplicarFuentes] Filas por fuente:', conteo);
+  // Guardar en localStorage como backup
+  const backup = {};
+  Object.keys(FUENTES).forEach(m => { backup[m] = FUENTES[m]; });
+  try { localStorage.setItem(LS_DATA_CARGUE, JSON.stringify(backup)); } catch (eLS) {}
 }
 
 async function probarConexion() {
