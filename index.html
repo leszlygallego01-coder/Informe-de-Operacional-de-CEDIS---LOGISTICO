@@ -253,8 +253,8 @@
   </div>
   <div class="d-flex align-items-center gap-2">
     <span id="estadoApi" class="badge bg-light text-dark">Sin datos</span>
+    <button class="btn btn-success btn-sm" id="btnSincronizarDrive" title="Leer carpetas Drive y hojas, y actualizar datos consolidados">&#9729; Sincronizar Drive</button>
     <button class="btn btn-outline-info btn-sm" id="btnProbarApi" title="Probar conexion con Google Drive">&#127760; Probar Conexion</button>
-    <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalConfig">&#9881; Configuracion</button>
     <button class="btn btn-light btn-sm" id="btnRefrescar">&#8635; Actualizar datos</button>
     <button class="btn btn-light btn-sm" id="btnExportar">&#8681; Exportar consolidado</button>
     <button class="btn btn-outline-light btn-sm" id="btnCerrarSesionVisor">&#128274; Cerrar Sesion</button>
@@ -496,12 +496,7 @@
           <div class="col-md-6"><label class="form-label">ID Carpeta Drive Rotacion Diaria</label>
             <input class="form-control" id="v_folder_rotacion" value="106BTSHLA8giLcW8qkvbJWiqA_7KiDpBi"></div>
         </div>
-        <div class="form-check mt-3">
-          <input class="form-check-input" type="checkbox" id="v_modo_local">
-          <label class="form-check-label" for="v_modo_local">
-            Usar los datos guardados localmente por el modulo de Cargue (sin conexion a Drive)
-          </label>
-        </div>
+        <!-- modoLocal eliminado v3.10.0 — datos SIEMPRE desde Drive/Sheets -->
       </div>
       <div class="modal-footer">
         <button class="btn btn-success" id="v_guardar">Guardar y cargar datos</button>
