@@ -9,7 +9,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyzjIudNfyUQqwp06ANCplpqrBrZ_I6ukUFJKAYDDnkX2U2koGH--jha1qPvt435bew/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwZDVwPYUFyPK1Z5A2aAB-VCGHFg2-TZB4Y1Boyp5U4cgB97QOObONEZYQJeHtr63jK/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -88,7 +88,8 @@ const CREDENCIALES_VISOR = {
   luisa_fernanda:      'Medis2024LuisaB09',
   nedi_yojana:         'Medis2024NediB09',
   beatriz_eugenia:     'Medis2024BeatrizB09',
-  mery_yolanda:        'Medis2024MeryB09'
+  mery_yolanda:        'Medis2024MeryB09',
+  yeimy_aldana:        'Medis2024YeimyA'
 };
 const LS_LOGIN_VISOR = 'MF_LOGIN_OK';
 const LS_PERFIL_VISOR = 'MF_PERFIL_ACTIVO';
@@ -139,7 +140,8 @@ const PERFILES_LABEL = {
   luisa_fernanda: 'Luisa Fernanda (Auxiliar B09)',
   nedi_yojana: 'Nedi Yojana (Auxiliar B09)',
   beatriz_eugenia: 'Beatriz Eugenia (Auxiliar B09)',
-  mery_yolanda: 'Mery Yolanda (Auxiliar B09)'
+  mery_yolanda: 'Mery Yolanda (Auxiliar B09)',
+  yeimy_aldana: 'Yeimy Aldana (Auxiliar CEDIS)'
 };
 
 /* ---------------------------------------------------------------------------
@@ -1388,11 +1390,11 @@ const GRUPOS_FIJOS = [
   { nombre: 'Grupo 2', numero: 2, color: '#FFDAB9', hex: '#FF8C00', miembros: ['Juan David Donato Moreno', 'Natalia Galvez', 'Daniela Nore\u00f1a'], lider: 'ADMINISTRATIVO' },
   { nombre: 'Grupo 3', numero: 3, color: '#B0E0E6', hex: '#0d6efd', miembros: ['Ana Lorena Ortiz', 'Karina Riascos', 'Vanesa Escobar'], lider: 'LUISA' },
   { nombre: 'Grupo 4', numero: 4, color: '#C8F7C5', hex: '#2fb457', miembros: ['Leidy Valencia', 'Bivian Lorena Rivera', 'Brayan Camilo Izquierdo'], lider: 'LUZ' },
-  { nombre: 'Grupo 5', numero: 5, color: '#D8BFD8', hex: '#6f42c1', miembros: ['Claudia Echeverry', 'Kelly Jhojana Beltran', 'Luz Lopez'], lider: 'LUZ' },
+  { nombre: 'Grupo 5', numero: 5, color: '#D8BFD8', hex: '#6f42c1', miembros: ['Claudia Echeverry', 'Kelly Jhojana Beltran Benjumea', 'Luz Lopez'], lider: 'LUZ' },
   { nombre: 'Grupo 6', numero: 6, color: '#FFFACD', hex: '#ffc107', miembros: ['Derly Yulieth Mosquera', 'Liz Karime Valencia', 'Angela Vanessa Aguirre'], lider: 'LUZ' },
   { nombre: 'Grupo 7', numero: 7, color: '#FFD0EC', hex: '#FF00FF', miembros: ['Luis Felipe Marin', 'Manuel David Salazar'], lider: 'ADMINISTRATIVO' },
-  { nombre: 'Grupo 8', numero: 8, color: '#D4F1F9', hex: '#17a2b8', miembros: ['Mayra Alejandra Franco', 'Camila Posada', 'Julieth Cardenas'], lider: 'ANDREA' },
-  { nombre: 'Grupo 9', numero: 9, color: '#E0E0E0', hex: '#6c757d', miembros: ['Jhony Saenz', 'Valentina Cano', 'Yeimy Aldana'], lider: 'LUISA' },
+  { nombre: 'Grupo 8', numero: 8, color: '#D4F1F9', hex: '#17a2b8', miembros: ['Mayra Alejandra Franco Muñoz', 'Camila Posada', 'Julieth Cardenas'], lider: 'ANDREA' },
+  { nombre: 'Grupo 9', numero: 9, color: '#E0E0E0', hex: '#6c757d', miembros: ['Jhony Saenz Sanchez', 'Valentina Cano Peña', 'Yeimy Aldana'], lider: 'LUISA' },
   { nombre: 'B09-1', numero: 9, color: '#B0E0E6', hex: '#17a2b8', miembros: ['Jose Santiago Ramirez Obando'], lider: 'Jose Santiago Ramirez Obando' },
   { nombre: 'B09-2', numero: 10, color: '#FFD0EC', hex: '#e83e8c', miembros: ['Yuliana Andrea Quira Manquillo'], lider: 'Yuliana Andrea Quira Manquillo' },
   { nombre: 'B09-3', numero: 11, color: '#C8F7C5', hex: '#20c997', miembros: ['Luisa Fernanda Garcia Orozco'], lider: 'Luisa Fernanda Garcia Orozco' },
