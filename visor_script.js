@@ -9,7 +9,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyr2pdiQ1v5VFbL4Pbomzu4xBw2ST4gSx7EsPO8RXTgJXsacXU6bRzEj-JMa1D5GpoW/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyp19mc4EFwY8QamEz9HedFl2SiJ-li0HGB_MlaSGCq5D6RHWus4RtLoSufmtRvuTBH/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -325,7 +325,20 @@ async function api(action, payload = {}, timeoutMs = 8000) {
   console.log('[api] Enviando:', action, fullPayload);
 
   // Helper: fetch con timeout configurable (default 8s para cache-only)
+  // Usa AbortController si esta disponible, si no Promise.race como fallback
   function fetchWithTimeout(url, options, ms) {
+    if (typeof AbortController !== 'undefined') {
+      const controller = new AbortController();
+      const mergedOpts = Object.assign({}, options, { signal: controller.signal });
+      const timer = setTimeout(() => controller.abort(), ms);
+      return fetch(url, mergedOpts)
+        .then(r => { clearTimeout(timer); return r; })
+        .catch(err => {
+          clearTimeout(timer);
+          if (err && err.name === 'AbortError') throw new Error('TIMEOUT');
+          throw err;
+        });
+    }
     return Promise.race([
       fetch(url, options),
       new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), ms))
@@ -387,10 +400,7 @@ async function apiGetFallback(payload, timeoutMs = 8000) {
   }
   const getUrl = CONFIG.apiUrl + (CONFIG.apiUrl.includes('?') ? '&' : '?') + params.join('&') + '&_t=' + Date.now();
   console.log('[api] GET fallback URL:', getUrl.substring(0, 150) + '...');
-  const res = await Promise.race([
-    fetch(getUrl, { method: 'GET', redirect: 'follow' }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs))
-  ]);
+  const res = await fetchWithTimeout(getUrl, { method: 'GET', redirect: 'follow' }, timeoutMs);
   const ct = res.headers.get('Content-Type') || '';
   console.log('[api] GET respuesta status:', res.status, 'Content-Type:', ct);
   if (ct.includes('text/html')) {
@@ -520,7 +530,7 @@ function _aplicarFuentes(r) {
 
 /** sincronizarDrive — Lee BD_CONSOLIDADO_DRIVE (hoja directa, sin leer carpetas Drive),
  *  actualiza datos y refresca los KPI del VISOR. Timeout 10s (lectura de hoja rapida).
- *  v3.11: cambiado de procesarYConsolidarDrive a consolidadoDesdeHoja para <2s.
+ *  v3.12.2: cambiado de procesarYConsolidarDrive a consolidadoDesdeHoja para <2s.
  */
 async function sincronizarDrive() {
   const btn = $('btnSincronizarDrive');
@@ -568,8 +578,20 @@ async function probarConexion() {
   badge.className = 'badge bg-warning text-dark';
   badge.textContent = 'Probando conexion...';
 
-  // Helper: fetch con timeout (10s para ping)
+  // Helper: fetch con timeout (10s para ping) — usa AbortController si disponible
   function fetchTimeout(url, options, ms) {
+    if (typeof AbortController !== 'undefined') {
+      const controller = new AbortController();
+      const mergedOpts = Object.assign({}, options, { signal: controller.signal });
+      const timer = setTimeout(() => controller.abort(), ms);
+      return fetch(url, mergedOpts)
+        .then(r => { clearTimeout(timer); return r; })
+        .catch(err => {
+          clearTimeout(timer);
+          if (err && err.name === 'AbortError') throw new Error('TIMEOUT');
+          throw err;
+        });
+    }
     return Promise.race([
       fetch(url, options),
       new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), ms))
