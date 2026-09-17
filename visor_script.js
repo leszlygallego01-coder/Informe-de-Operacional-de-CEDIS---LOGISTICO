@@ -9,7 +9,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbzhP06AFhQRXTWYngK_BhmidE14y2Qz6Ech2NbQSC6sLlPInDokgSxfrEsEebRXFVwj/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyzjIudNfyUQqwp06ANCplpqrBrZ_I6ukUFJKAYDDnkX2U2koGH--jha1qPvt435bew/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -1375,28 +1375,30 @@ function pintarSeccion4() {
 }
 
 /* ---------------------------------------------------------------------------
- * 7. APERTURA DEL DIA — 14 GRUPOS FIJOS (8 CEDIS + 6 B09)
- *    14 grupos fijos con miembros definidos (8 CEDIS + 6 B09). Sin rotacion ciclica.
- *    Cada grupo muestra: nombre del color + lista de miembros.
- *    Grupo Gris = especial (5 miembros, asignado a B05 ALTO COSTO).
- *    Los otros 7 trios = asignados a CENDIS PRINCIPAL TULUA PARQUE INDUSTRIAL.
- * ------------------------------------------------------------------------- */
+ * 7. APERTURA DEL DIA — 15 GRUPOS FIJOS (9 CEDIS + 6 B09)
+ *    15 grupos fijos con miembros definidos (9 CEDIS + 6 B09). Sin rotacion ciclica.
+ *    Cada grupo muestra: nombre numerico + lista de miembros.
+ *    Grupo 9 = especial (asignado a B05 ALTO COSTO).
+ *    Grupos 1-8 = asignados a CENDIS PRINCIPAL TULUA PARQUE INDUSTRIAL.
+ *    Grupos B09-1 a B09-6 = auxiliares B09 individuales.
+ ------------------------------------------------------------------------- */
 
 const GRUPOS_FIJOS = [
-  { nombre: 'Rojo',    numero: 1, color: '#FFB3B3', hex: '#dc3545', miembros: ['Nicoll Trivi\u00f1o', 'Estefania Parra', 'Luisa Mar\u00eda Osorio'], lider: 'Luisa Mar\u00eda Osorio' },
-  { nombre: 'Naranja', numero: 2, color: '#FFDAB9', hex: '#FF8C00', miembros: ['Daniela Nore\u00f1a', 'Juan David Moreno', 'Kelly Beltran'] },
-  { nombre: 'Azul',    numero: 3, color: '#B0E0E6', hex: '#0d6efd', miembros: ['Karina Riascos', 'Ana Lorena Ortiz', 'Vaneza Escobar'] },
-  { nombre: 'Verde',   numero: 4, color: '#C8F7C5', hex: '#2fb457', miembros: ['Leidy Valencia', 'Bivian Lorena Rivera', 'Brayan Camilo Izquierdo'] },
-  { nombre: 'Morado',  numero: 5, color: '#D8BFD8', hex: '#6f42c1', miembros: ['Jhony Saenz', 'Natalia Galvez', 'Valentina Cano'] },
-  { nombre: 'Amarillo',numero: 6, color: '#FFFACD', hex: '#ffc107', miembros: ['Liz Karime Valencia', 'Angela Vanessa Aguirre', 'Derly Yulieth Mosquera'] },
-  { nombre: 'Fucsia',  numero: 7, color: '#FFD0EC', hex: '#FF00FF', miembros: ['Manuel David Salazar', 'Luz Nelly Chaves', 'Luis Felipe Marin'], lider: 'Luz Nelly Chaves' },
-  { nombre: 'Gris',    numero: 8, color: '#E0E0E0', hex: '#6c757d', miembros: ['Claudia Echeverry', 'Camila Posada', 'Angela Vera', 'Mayra Alejandra Franco', 'Andrea Vanegas'], lider: 'Andrea Vanegas' },
-  { nombre: 'Coral',   numero: 9, color: '#FF7F7F', hex: '#FF6347', miembros: ['Jose Santiago Ramirez Obando'], lider: 'Jose Santiago Ramirez Obando' },
-  { nombre: 'Celeste', numero: 10, color: '#B0E8E8', hex: '#20B2AA', miembros: ['Yuliana Andrea Quira Manquillo'], lider: 'Yuliana Andrea Quira Manquillo' },
-  { nombre: 'Lavanda', numero: 11, color: '#E6E6FA', hex: '#9370DB', miembros: ['Luisa Fernanda Garcia Orozco'], lider: 'Luisa Fernanda Garcia Orozco' },
-  { nombre: 'Oliva',   numero: 12, color: '#C8E6C8', hex: '#6B8E23', miembros: ['Nedi Yojana Zamora Yandi'], lider: 'Nedi Yojana Zamora Yandi' },
-  { nombre: 'Rosa',    numero: 13, color: '#FFD1DC', hex: '#FF69B4', miembros: ['Beatriz Eugenia Urbano Botina'], lider: 'Beatriz Eugenia Urbano Botina' },
-  { nombre: 'Bronce',  numero: 14, color: '#D4A76A', hex: '#CD853F', miembros: ['Mery Yolanda Cadavid Bermudez'], lider: 'Mery Yolanda Cadavid Bermudez' }
+  { nombre: 'Grupo 1', numero: 1, color: '#FFB3B3', hex: '#dc3545', miembros: ['Angie Mar\u00eda Tascon', 'Estefania Parra', 'Nicoll Trivi\u00f1o'], lider: 'LUISA' },
+  { nombre: 'Grupo 2', numero: 2, color: '#FFDAB9', hex: '#FF8C00', miembros: ['Juan David Donato Moreno', 'Natalia Galvez', 'Daniela Nore\u00f1a'], lider: 'ADMINISTRATIVO' },
+  { nombre: 'Grupo 3', numero: 3, color: '#B0E0E6', hex: '#0d6efd', miembros: ['Ana Lorena Ortiz', 'Karina Riascos', 'Vanesa Escobar'], lider: 'LUISA' },
+  { nombre: 'Grupo 4', numero: 4, color: '#C8F7C5', hex: '#2fb457', miembros: ['Leidy Valencia', 'Bivian Lorena Rivera', 'Brayan Camilo Izquierdo'], lider: 'LUZ' },
+  { nombre: 'Grupo 5', numero: 5, color: '#D8BFD8', hex: '#6f42c1', miembros: ['Claudia Echeverry', 'Kelly Jhojana Beltran', 'Luz Lopez'], lider: 'LUZ' },
+  { nombre: 'Grupo 6', numero: 6, color: '#FFFACD', hex: '#ffc107', miembros: ['Derly Yulieth Mosquera', 'Liz Karime Valencia', 'Angela Vanessa Aguirre'], lider: 'LUZ' },
+  { nombre: 'Grupo 7', numero: 7, color: '#FFD0EC', hex: '#FF00FF', miembros: ['Luis Felipe Marin', 'Manuel David Salazar'], lider: 'ADMINISTRATIVO' },
+  { nombre: 'Grupo 8', numero: 8, color: '#D4F1F9', hex: '#17a2b8', miembros: ['Mayra Alejandra Franco', 'Camila Posada', 'Julieth Cardenas'], lider: 'ANDREA' },
+  { nombre: 'Grupo 9', numero: 9, color: '#E0E0E0', hex: '#6c757d', miembros: ['Jhony Saenz', 'Valentina Cano', 'Yeimy Aldana'], lider: 'LUISA' },
+  { nombre: 'B09-1', numero: 9, color: '#B0E0E6', hex: '#17a2b8', miembros: ['Jose Santiago Ramirez Obando'], lider: 'Jose Santiago Ramirez Obando' },
+  { nombre: 'B09-2', numero: 10, color: '#FFD0EC', hex: '#e83e8c', miembros: ['Yuliana Andrea Quira Manquillo'], lider: 'Yuliana Andrea Quira Manquillo' },
+  { nombre: 'B09-3', numero: 11, color: '#C8F7C5', hex: '#20c997', miembros: ['Luisa Fernanda Garcia Orozco'], lider: 'Luisa Fernanda Garcia Orozco' },
+  { nombre: 'B09-4', numero: 12, color: '#FFDAB9', hex: '#fd7e14', miembros: ['Nedi Yojana Zamora Yandi'], lider: 'Nedi Yojana Zamora Yandi' },
+  { nombre: 'B09-5', numero: 13, color: '#D8BFD8', hex: '#6f42c1', miembros: ['Beatriz Eugenia Urbano Botina'], lider: 'Beatriz Eugenia Urbano Botina' },
+  { nombre: 'B09-6', numero: 14, color: '#E0E0E0', hex: '#343a40', miembros: ['Mery Yolanda Cadavid Bermudez'], lider: 'Mery Yolanda Cadavid Bermudez' }
 ];
 
 /** Genera la lista de grupos del dia (fija, sin rotacion). */
