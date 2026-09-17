@@ -9,7 +9,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwZDVwPYUFyPK1Z5A2aAB-VCGHFg2-TZB4Y1Boyp5U4cgB97QOObONEZYQJeHtr63jK/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxM4RCtmV4RKSQgN7Jl130cOpm6JIwrENkBR5wunuC9M4id3eyVIxOVaBYzvR5jLhmP/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -200,7 +200,7 @@ const A = {
   origen:       ['Bodega Origen', 'BODEGA ORIGEN DEL TRASLADO', 'Bodega Origen Extrema', 'Bodega Origen Emisora'],
   traslado:     ['Documento TRASLADO', 'TRASLADO', 'Documento Traslado', 'Numero Traslado'],
   alista:       ['QUIEN ALISTA', 'Responsable de Empacar / Rotular', 'Quien Alista'],
-  destino:      ['DESTINO', 'BODEGA DESTINO DEL TRASLADO', 'Bodega Destino (CENDIS / B05)', 'Bodega Destino'],
+  destino:      ['DESTINO', 'BODEGA DESTINO DEL TRASLADO', 'Bodega Destino (CENDIS / B05)', 'Bodega Destino', 'Bodega Destino.'],
   zona:         ['ZONA'],
   seguimiento:  ['SEGUIMIENTO'],
   respCendis:   ['RESPONSABLE DE ENTREGA CENDIS', 'Responsable de Entrega', 'Responsable Entrega CENDIS'],
