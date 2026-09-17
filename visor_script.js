@@ -9,7 +9,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwULcQvmaML1qntJzrHTSU5vRlQmYfbB3gjvLSF6hUcEzJqx50pe70mhz-IJE2KBe3C/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyYfJDlqMSR0YgscNzo6WdmDcJPseha6iWVce05mwdxJI0ALKy_0iL3j-OmfcILibCu/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -863,7 +863,7 @@ function pintarKpis(lista) {
     const clave = normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado));
     if (clave) enTransitoUnicos.add(clave);
   });
-  const pendientes = enTransitoUnicos.size || lista.filter(t => t.estado !== 'CUMPLIDO').length;
+  const pendientes = enTransitoUnicos.size || (lista.length ? lista.filter(t => t.estado !== 'CUMPLIDO').length : 0);
 
   // URGENTES EN RIESGO: filter by Concepto = PQRS, Tutelas/Tutela, Desacato, Orden de Arresto, Jornada
   const urgentes = lista.filter(urgenteEnRiesgo).length;
@@ -877,6 +877,10 @@ function pintarKpis(lista) {
   $('kpi_total').textContent = totalTraslados;
   $('kpi_cumplidos').textContent = cumplidos;
   $('kpi_cumplimiento').textContent = (totalTraslados ? Math.round(cumplidos * 100 / totalTraslados) : 0) + '% de cumplimiento';
+  /* v3.15.0: Defensive — ensure all KPI elements show 0 not NaN when FUENTES empty */
+  if (!Number.isFinite(totalTraslados)) $('kpi_total').textContent = '0';
+  if (!Number.isFinite(cumplidos)) $('kpi_cumplidos').textContent = '0';
+  if (!Number.isFinite(pendientes)) $('kpi_pendientes').textContent = '0';
   $('kpi_pendientes').textContent = pendientes;
   $('kpi_urgentes').textContent = urgentes;
   $('kpi_novedades').textContent = novedades.length;
@@ -884,9 +888,10 @@ function pintarKpis(lista) {
   $('kpi_dif_inv').textContent = difInv;
 
   // Tiempos promedio calculados cruzando fuentes por Documento Traslado
-  const pAlist = promedio(lista.map(t => t.tAlistamiento));
-  const pEspera = promedio(lista.map(t => t.tEsperaDespacho));
-  const pTransito = promedio(lista.map(t => t.tTransito));
+  /* v3.15.0: defensive — if lista empty, promedio returns NaN; force 0 */
+  const pAlist = lista.length ? promedio(lista.map(t => t.tAlistamiento)) : 0;
+  const pEspera = lista.length ? promedio(lista.map(t => t.tEsperaDespacho)) : 0;
+  const pTransito = lista.length ? promedio(lista.map(t => t.tTransito)) : 0;
   $('kpi_t_alist').textContent = formatoDuracion(pAlist);
   $('kpi_t_espera').textContent = formatoDuracion(pEspera);
   $('kpi_t_transito').textContent = formatoDuracion(pTransito);
