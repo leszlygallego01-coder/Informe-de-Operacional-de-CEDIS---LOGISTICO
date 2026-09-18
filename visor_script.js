@@ -1,5 +1,5 @@
 /* =================================================================================
- * MEDISFARMA | visor_script.js  —  v3.16.0
+ * MEDISFARMA | visor_script.js  —  v3.17.0
  * VISOR reestructurado: KPIs, tiempos de ciclo y graficas 100% derivados de
  * BD_CONSOLIDADO_DRIVE y respetando los filtros (fecha / zona / bodega).
  *   • Cumplidos = recepcion final confirmada en punto (FECHA RECIBIDO EN PUNTO)
@@ -12,7 +12,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbze9oIOXNrAASKO9hqmj9vphLvFYTC_zf_wJnAY4jydtZt_DXZQ25umI3K8JqYYrANO/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwKllviu4och22vUqdABoX5-Qu9DtC4elzt-TiwHOKoUKhxPSexgCcwcSBP1Qt9bKKU/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -447,15 +447,15 @@ async function cargarDatos() {
 
   // ── FASE 1: Intento rápido de caché ──
   try {
-    console.log('[cargarDatos] FASE 1: Leyendo caché (timeout 8s)...');
-    $('estadoApi').textContent = 'Leyendo caché...';
-    const r = await api('consolidadoVisor', {}, 8000);
+    console.log('[cargarDatos] FASE 1: Leyendo BD_CONSOLIDADO_VISOR (timeout 12s)...');
+    $('estadoApi').textContent = 'Leyendo consolidado...';
+    const r = await api('consolidadoDesdeCarpeta', {}, 12000);
 
     if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
       console.log('[cargarDatos] ✓ Datos disponibles. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
       _aplicarFuentes(r);
       $('estadoApi').className = 'badge bg-success';
-      $('estadoApi').textContent = r.origen === 'hoja' ? 'Caché (hoja)' : r.origen === 'cache' ? 'Caché OK' : 'Drive OK';
+      $('estadoApi').textContent = r.origen === 'carpeta' ? 'Consolidado OK' : r.origen === 'hoja' ? 'Caché (hoja)' : r.origen === 'cache' ? 'Caché OK' : 'Drive OK';
       exito = true;
     } else if (r.ok === false) {
       // Caché vacía — pasar a FASE 2
@@ -478,22 +478,22 @@ async function cargarDatos() {
       console.log('[cargarDatos] FASE 2: Reintentando lectura (timeout 30s)...');
       $('estadoApi').className = 'badge bg-warning text-dark';
       $('estadoApi').textContent = 'Reintentando...';
-      toast('No se encontraron datos en caché. Reintentando...', 'info', 4000);
+      toast('No se encontraron datos en el consolidado. Reintentando...', 'info', 4000);
 
-      const r2 = await api('consolidadoVisor', {}, 30000);
+      const r2 = await api('consolidadoDesdeCarpeta', {}, 30000);
 
       if (r2.ok && r2.fuentes && Object.keys(r2.fuentes).length > 0) {
         console.log('[cargarDatos] ✓ Datos recibidos en FASE 2. Fuentes:', Object.keys(r2.fuentes), 'origen:', r2.origen);
         _aplicarFuentes(r2);
         $('estadoApi').className = 'badge bg-success';
-        $('estadoApi').textContent = r2.origen === 'hoja' ? 'Caché (hoja)' : 'Caché OK';
+        $('estadoApi').textContent = r2.origen === 'carpeta' ? 'Consolidado OK' : r2.origen === 'hoja' ? 'Caché (hoja)' : 'Caché OK';
         exito = true;
         toast('✓ Datos cargados correctamente.', 'success', 3000);
       } else {
         console.error('[cargarDatos] FASE 2: respuesta sin datos:', r2);
         $('estadoApi').className = 'badge bg-warning text-dark';
         $('estadoApi').textContent = 'Sin datos';
-        toast('No hay datos consolidados. Presione <strong>"Sincronizar Drive"</strong> para leer las carpetas de Drive.', 'warning', 10000);
+        toast('No hay datos consolidados. En el CARGUE presione <strong>"Enviar datos al Consolidado"</strong> para generar BD_CONSOLIDADO_VISOR.', 'warning', 10000);
       }
     } catch (e2) {
       console.error('[cargarDatos] FASE 2 error:', e2.message);
@@ -534,19 +534,20 @@ function _aplicarFuentes(r) {
   console.log('[_aplicarFuentes] Filas por fuente:', conteo);
 }
 
-/** sincronizarDrive — Lee BD_CONSOLIDADO_DRIVE (hoja directa, sin leer carpetas Drive),
- *  actualiza datos y refresca los KPI del VISOR. Timeout 10s (lectura de hoja rapida).
- *  v3.12.2: cambiado de procesarYConsolidarDrive a consolidadoDesdeHoja para <2s.
+/** sincronizarDrive — Lee el archivo BD_CONSOLIDADO_VISOR de la carpeta de Drive
+ *  (lectura directa, sin recorrer carpetas origen), actualiza datos y refresca los KPI.
+ *  v3.17.0: cambiado a consolidadoDesdeCarpeta (nuevo modelo de archivo dedicado).
+ *  Timeout 12s + spinner asincrono para evitar cortes de 10s.
  */
 async function sincronizarDrive() {
   const btn = $('btnSincronizarDrive');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sincronizando...'; }
   $('estadoApi').className = 'badge bg-info';
   $('estadoApi').textContent = 'Sincronizando...';
-  toast('<strong>Sincronizando...</strong> Leyendo datos consolidados.', 'info', 5000);
+  toast('<strong>Sincronizando...</strong> Leyendo el consolidado desde Drive.', 'info', 5000);
 
   try {
-    const r = await api('consolidadoDesdeHoja', {}, 10000); // 10s timeout (hoja directa)
+    const r = await api('consolidadoDesdeCarpeta', {}, 12000); // 12s timeout (lectura de archivo directa)
 
     if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
       _aplicarFuentes(r);
@@ -556,18 +557,18 @@ async function sincronizarDrive() {
       construirConsolidado();
       poblarFiltros();
       refrescarTodo();
-      console.log('[sincronizarDrive] OK — fuentes:', Object.keys(r.fuentes));
+      console.log('[sincronizarDrive] OK — origen:', r.origen, 'fuentes:', Object.keys(r.fuentes));
     } else {
       $('estadoApi').className = 'badge bg-warning text-dark';
       $('estadoApi').textContent = 'Sin datos';
-      toast('Sin datos consolidados: ' + (r.error || 'respuesta vacia'), 'warning', 8000);
+      toast('Sin datos consolidados. En el CARGUE presione <strong>"Enviar datos al Consolidado"</strong>. ' + (r.error || ''), 'warning', 9000);
       console.warn('[sincronizarDrive] Sin datos:', r);
     }
   } catch (e) {
     $('estadoApi').className = 'badge bg-danger';
     $('estadoApi').textContent = 'Error sync';
     if (e.message === 'TIMEOUT') {
-      toast('La sincronización excedió 10 segundos. Intente de nuevo.', 'warning', 8000);
+      toast('La sincronización excedió el tiempo límite. Intente de nuevo.', 'warning', 8000);
     } else {
       toast('Error al sincronizar: ' + e.message, 'danger', 8000);
     }
