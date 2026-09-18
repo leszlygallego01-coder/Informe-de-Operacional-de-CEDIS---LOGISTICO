@@ -1,5 +1,5 @@
 /* =================================================================================
- * MEDISFARMA | visor_script.js  —  v3.17.0
+ * MEDISFARMA | visor_script.js  —  v3.17.1
  * VISOR reestructurado: KPIs, tiempos de ciclo y graficas 100% derivados de
  * BD_CONSOLIDADO_DRIVE y respetando los filtros (fecha / zona / bodega).
  *   • Cumplidos = recepcion final confirmada en punto (FECHA RECIBIDO EN PUNTO)
@@ -12,7 +12,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbwKllviu4och22vUqdABoX5-Qu9DtC4elzt-TiwHOKoUKhxPSexgCcwcSBP1Qt9bKKU/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyIhBrpDgUbY618CY6yJ7wK3T4zWvCpK1jcC7MW4C04qu60tSjAhlg2xeuB7JWllVdb/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
