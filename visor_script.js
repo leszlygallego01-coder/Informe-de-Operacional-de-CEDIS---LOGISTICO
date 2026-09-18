@@ -449,28 +449,31 @@ async function cargarDatos() {
     return;
   }
 
-  // ── MODO API: estrategia de 2 fases ──
-  // FASE 1: Intentar leer de caché/hoja (timeout 8s) — la respuesta normal <2s
-  // FASE 2: Si caché vacía, retry (timeout 30s) — espera a que el backend devuelva datos
-  // Si ambas fallan, se muestra error y botón "Sincronizar Drive"
+  // ── MODO API: LECTURA DIRECTA de las carpetas/fuentes (v3.20.0) ──
+  // FASE 1: Lectura DIRECTA de Drive (procesarYConsolidarDrive) — lee TODAS las
+  //   carpetas/fuentes originales (novedades, inventario, logistica, recepcion,
+  //   traslados_anulados) + overlay directo por fileId+gid. NO usa el archivo
+  //   consolidado intermedio. Timeout amplio (45s) porque lee Drive en vivo.
+  // FASE 2: Retry con timeout mayor (60s) si la primera lectura no entregó datos.
+  // Si ambas fallan, se muestra error y botón "Sincronizar Drive".
 
   let exito = false;
 
-  // ── FASE 1: Intento rápido de caché ──
+  // ── FASE 1: Lectura DIRECTA de las fuentes de Drive ──
   try {
-    console.log('[cargarDatos] FASE 1: Leyendo BD_CONSOLIDADO_VISOR (timeout 12s)...');
-    $('estadoApi').textContent = 'Leyendo consolidado...';
-    const r = await api('consolidadoDesdeCarpeta', {}, 12000);
+    console.log('[cargarDatos] FASE 1: Lectura DIRECTA de las fuentes de Drive (timeout 45s)...');
+    $('estadoApi').textContent = 'Leyendo Drive (directo)...';
+    const r = await api('procesarYConsolidarDrive', {}, 45000);
 
     if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
-      console.log('[cargarDatos] ✓ Datos disponibles. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
+      console.log('[cargarDatos] ✓ Datos DIRECTOS disponibles. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
       _aplicarFuentes(r);
       $('estadoApi').className = 'badge bg-success';
-      $('estadoApi').textContent = r.origen === 'carpeta' ? 'Consolidado OK' : r.origen === 'hoja' ? 'Caché (hoja)' : r.origen === 'cache' ? 'Caché OK' : 'Drive OK';
+      $('estadoApi').textContent = '✓ Datos en vivo';
       exito = true;
     } else if (r.ok === false) {
-      // Caché vacía — pasar a FASE 2
-      console.warn('[cargarDatos] Caché vacía (origen=' + r.origen + '), reintentando...');
+      // Sin datos — pasar a FASE 2
+      console.warn('[cargarDatos] Lectura directa sin datos (origen=' + r.origen + '), reintentando...');
     } else {
       console.warn('[cargarDatos] Respuesta inesperada en FASE 1:', r);
     }
@@ -486,20 +489,20 @@ async function cargarDatos() {
   // ── FASE 2: Si FASE 1 no entregó datos, retry con timeout mayor ──
   if (!exito) {
     try {
-      console.log('[cargarDatos] FASE 2: Reintentando lectura (timeout 30s)...');
+      console.log('[cargarDatos] FASE 2: Reintentando lectura DIRECTA (timeout 60s)...');
       $('estadoApi').className = 'badge bg-warning text-dark';
       $('estadoApi').textContent = 'Reintentando...';
-      toast('No se encontraron datos en el consolidado. Reintentando...', 'info', 4000);
+      toast('Reintentando la lectura directa desde las fuentes de Drive...', 'info', 4000);
 
-      const r2 = await api('consolidadoDesdeCarpeta', {}, 30000);
+      const r2 = await api('procesarYConsolidarDrive', {}, 60000);
 
       if (r2.ok && r2.fuentes && Object.keys(r2.fuentes).length > 0) {
-        console.log('[cargarDatos] ✓ Datos recibidos en FASE 2. Fuentes:', Object.keys(r2.fuentes), 'origen:', r2.origen);
+        console.log('[cargarDatos] ✓ Datos DIRECTOS recibidos en FASE 2. Fuentes:', Object.keys(r2.fuentes), 'origen:', r2.origen);
         _aplicarFuentes(r2);
         $('estadoApi').className = 'badge bg-success';
-        $('estadoApi').textContent = r2.origen === 'carpeta' ? 'Consolidado OK' : r2.origen === 'hoja' ? 'Caché (hoja)' : 'Caché OK';
+        $('estadoApi').textContent = '✓ Datos en vivo';
         exito = true;
-        toast('✓ Datos cargados correctamente.', 'success', 3000);
+        toast('✓ Datos cargados directamente desde Drive.', 'success', 3000);
       } else {
         console.error('[cargarDatos] FASE 2: respuesta sin datos:', r2);
         $('estadoApi').className = 'badge bg-warning text-dark';
@@ -532,10 +535,10 @@ async function cargarDatos() {
   refrescarTodo();
   console.log('[cargarDatos] Carga inicial completada.');
 
-  // v3.19.0 — AUTO-FETCH: siempre dispara una lectura DIRECTA en segundo plano
-  // desde las fuentes de Drive (sin intervencion manual). Si la cache estaba
-  // vacia, este refresco es el que traera los datos por primera vez.
-  _refrescoDirectoBackground(!exito);
+  // v3.20.0 — La FASE 1/2 ya leen DIRECTO de las fuentes de Drive. Solo si
+  // ambas fallaron disparamos un reintento en segundo plano para recuperar
+  // los datos. El refresco periódico (interval) mantiene todo actualizado.
+  if (!exito) _refrescoDirectoBackground(true);
 }
 
 /**
