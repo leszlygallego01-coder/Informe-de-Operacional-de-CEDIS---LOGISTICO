@@ -317,17 +317,17 @@
 
   <!-- ============================ KPIs ============================ -->
   <div class="row g-3 mb-3" id="kpiRow">
-    <div class="col-md-2 col-6"><div class="kpi-card"><div class="kpi-label">Traslados</div>
-      <div class="kpi-valor" id="kpi_total">0</div><div class="kpi-detalle">en el rango filtrado</div></div></div>
-    <div class="col-md-2 col-6"><div class="kpi-card verde"><div class="kpi-label">Cumplidos</div>
+    <div class="col-md-2 col-6"><div class="kpi-card"><div class="kpi-label">Cantidad de Traslados</div>
+      <div class="kpi-valor" id="kpi_total">0</div><div class="kpi-detalle">Documento Traslado en el rango filtrado</div></div></div>
+    <div class="col-md-2 col-6"><div class="kpi-card verde"><div class="kpi-label">Cumplidos (Recibidos)</div>
       <div class="kpi-valor text-success" id="kpi_cumplidos">0</div><div class="kpi-detalle" id="kpi_cumplimiento">0% de cumplimiento</div></div></div>
     <div class="col-md-2 col-6"><div class="kpi-card ambar"><div class="kpi-label">En transito / Pendientes</div>
-      <div class="kpi-valor" id="kpi_pendientes">0</div><div class="kpi-detalle">sin recibir en punto</div></div></div>
-    <div class="col-md-2 col-6"><div class="kpi-card rojo"><div class="kpi-label">Urgentes en riesgo</div>
-      <div class="kpi-valor text-danger" id="kpi_urgentes">0</div><div class="kpi-detalle">urgentes no enviados/entregados</div></div></div>
+      <div class="kpi-valor" id="kpi_pendientes">0</div><div class="kpi-detalle">despachados/asignados sin recepcion</div></div></div>
+    <div class="col-md-2 col-6"><div class="kpi-card rojo"><div class="kpi-label">Traslados Urgentes</div>
+      <div class="kpi-valor text-danger" id="kpi_urgentes">0</div><div class="kpi-detalle">URGENTE = SI en riesgo o pendientes</div></div></div>
     <div class="col-md-2 col-6"><div class="kpi-card rojo"><div class="kpi-label">Novedades / Anulaciones</div>
-      <div class="kpi-valor" id="kpi_novedades">0</div><div class="kpi-detalle" id="kpi_novedades_abiertas">0 sin solucionar</div></div></div>
-    <div class="col-md-2 col-6"><div class="kpi-card"><div class="kpi-label">Diferencias de inventario</div>
+      <div class="kpi-valor" id="kpi_novedades">0</div><div class="kpi-detalle" id="kpi_novedades_abiertas">0 anulados &middot; 0 sin solucionar</div></div></div>
+    <div class="col-md-2 col-6"><div class="kpi-card"><div class="kpi-label">Diferencias de Inventario</div>
       <div class="kpi-valor text-danger" id="kpi_dif_inv">0</div><div class="kpi-detalle">items con faltante/sobrante</div></div></div>
   </div>
 
@@ -335,13 +335,13 @@
   <div class="row g-3 mb-1">
     <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo de Alistamiento (prom.)</div>
       <div class="kpi-valor" id="kpi_t_alist">--</div>
-      <div class="kpi-detalle">FECHA ENTREGA LOGISTICA &minus; Marca temporal</div></div></div>
+      <div class="kpi-detalle">FECHA ENTREGA LOGISTICA &minus; FECHA ASIGNACION TRASLADO</div></div></div>
     <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo de Espera Despacho (prom.)</div>
       <div class="kpi-valor" id="kpi_t_espera">--</div>
-      <div class="kpi-detalle">FECHA PLANILLA ENVIO &minus; FECHA ENTREGA LOGISTICA</div></div></div>
-    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo de Transito / Entrega en Punto (prom.)</div>
+      <div class="kpi-detalle">FECHA CREACION/ENVIO PLANILLA &minus; FECHA ENTREGA LOGISTICA</div></div></div>
+    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo en Transito (prom.)</div>
       <div class="kpi-valor" id="kpi_t_transito">--</div>
-      <div class="kpi-detalle">FECHA RECIBIDO EN PUNTO &minus; FECHA PLANILLA ENVIO</div></div></div>
+      <div class="kpi-detalle">FECHA RECIBIDO EN PUNTO &minus; FECHA CREACION/ENVIO PLANILLA</div></div></div>
   </div>
 
   <div class="row g-3">
@@ -395,9 +395,9 @@
     </div>
     <div class="mf-panel-body">
       <div class="alert alert-info py-2 small">
-        Las modificaciones y anulaciones alimentan el indicador de novedades, pero en el seguimiento general
-        se contabilizan como <strong>CUMPLIDO</strong> conservando la <strong>Marca temporal</strong> original,
-        de modo que el calculo de tiempos reales no se altera.
+        Las novedades y anulaciones alimentan el indicador <strong>Novedades / Anulaciones</strong>.
+        Los tiempos del ciclo (Alistamiento, Espera Despacho y Transito) se calculan a partir de las
+        marcas temporales reales de cada paso, de modo que una modificacion posterior no altera el calculo.
       </div>
       <input class="form-control form-control-sm mb-2" id="buscar_s3" placeholder="Buscar por traslado, causa, solicitante...">
       <div class="tabla-scroll"><table class="table table-sm table-bordered tabla-visor mb-0">
