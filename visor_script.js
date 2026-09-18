@@ -1,15 +1,18 @@
 /* =================================================================================
- * MEDISFARMA | visor_script.js
- * VISOR: consolidado de traslados, recepcion tecnica externa, novedades,
- * control de inventario, filtros, alertas de urgencias, medicion de tiempos,
- * APERTURA DEL DIA (rotacion diaria) y SEGURIDAD.
+ * MEDISFARMA | visor_script.js  —  v3.16.0
+ * VISOR reestructurado: KPIs, tiempos de ciclo y graficas 100% derivados de
+ * BD_CONSOLIDADO_DRIVE y respetando los filtros (fecha / zona / bodega).
+ *   • Cumplidos = recepcion final confirmada en punto (FECHA RECIBIDO EN PUNTO)
+ *   • En Transito/Pendientes = despachados/asignados sin recepcion
+ *   • Novedades/Anulaciones = novedades + traslados anulados (Paso 3)
+ *   • Tiempos: Alistamiento / Espera Despacho / Transito con formulas exactas
  * Toda la lectura se hace por NOMBRE DE CABECERA (nunca por indice de columna).
  * ================================================================================= */
 'use strict';
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyYfJDlqMSR0YgscNzo6WdmDcJPseha6iWVce05mwdxJI0ALKy_0iL3j-OmfcILibCu/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbze9oIOXNrAASKO9hqmj9vphLvFYTC_zf_wJnAY4jydtZt_DXZQ25umI3K8JqYYrANO/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -69,7 +72,7 @@ function cargarConfigVisor() {
 let CONFIG = cargarConfigVisor();
 
 /** Datos crudos por fuente y datos derivados. */
-let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [], trasladosConsulta: [], asignacion: [], entregaLogistica: [], despachoAsignacion: [] };
+let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [], trasladosConsulta: [], asignacion: [], entregaLogistica: [], despachoAsignacion: [], traslados_anulados: [] };
 let TRASLADOS = [];    // consolidado calculado
 let CHARTS = {};
 // Los grupos son fijos — no se necesita ROTACION_DIA ni historial
@@ -253,7 +256,10 @@ const A = {
   tipoCarga:    ['Tipo Carga', 'TIPO CARGA'],
   concepto:     ['Concepto', 'CONCEPTO'],
   // Logistica - Revisado
-  revisado:     ['Revisado', 'REVISADO']
+  revisado:     ['Revisado', 'REVISADO'],
+  // Asignacion / planilla (fechas del ciclo)
+  fAsignacion:  ['Fecha Asignacion de Traslado', 'FECHA ASIGNACION DE TRASLADO', 'Fecha Asignacion', 'Marca temporal'],
+  fCreacionPlanilla: ['Fecha Creacion Planilla', 'Fecha Asignacion Planilla', 'FECHA PLANILLA ENVIO LOGISTICA', 'Fecha de Envio del Traslado']
 };
 
 /** Convierte texto de fecha (varios formatos) a Date o null. */
@@ -664,9 +670,13 @@ async function probarConexion() {
 
 /* ---------------------------------------------------------------------------
  * 2b. CALCULO DE TIEMPOS CRUZANDO FUENTES POR DOCUMENTO TRASLADO
+ *     v3.16.0 — Todas las lecturas provienen de BD_CONSOLIDADO_DRIVE.
+ *     Formulas EXACTAS del requerimiento:
+ *       Alistamiento     = Fecha Entrega a Logistica  − Fecha Asignacion de Traslado
+ *       Espera Despacho  = Fecha Creacion/Envio Planilla − Fecha Entrega a Logistica
+ *       Transito         = Fecha Recibido en Punto     − Fecha Creacion/Envio Planilla
  * ------------------------------------------------------------------------- */
-/** Alistamiento = timestamp(BD_ASIGNACION) - timestamp(BD_ENTREGA_A_LOGISTICA)
- *  Match por Documento Traslado normalizado */
+/** Alistamiento = ts(Entrega a Logistica) − ts(Asignacion de Traslado). */
 function calcularAlistamiento(claveTraslado) {
   const filaAsignacion = FUENTES.asignacion.find(f =>
     normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado)) === claveTraslado
@@ -677,11 +687,11 @@ function calcularAlistamiento(claveTraslado) {
   if (!filaAsignacion || !filaEntrega) return null;
   const tsAsignacion = obtenerValorPorNombreColumna(filaAsignacion, A.marca);
   const tsEntrega = obtenerValorPorNombreColumna(filaEntrega, A.marca);
-  return horasEntre(tsEntrega, tsAsignacion);
+  // Entrega − Asignacion (Entrega ocurre despues de la asignacion)
+  return horasEntre(tsAsignacion, tsEntrega);
 }
 
-/** Espera Despacho = timestamp(BD_ENTREGA_A_LOGISTICA) - timestamp(Despacho y asignacion)
- *  Match por Documento Traslado normalizado */
+/** Espera Despacho = ts(Creacion/Envio Planilla) − ts(Entrega a Logistica). */
 function calcularEsperaDespacho(claveTraslado) {
   const filaEntrega = FUENTES.entregaLogistica.find(f =>
     normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado)) === claveTraslado
@@ -692,7 +702,8 @@ function calcularEsperaDespacho(claveTraslado) {
   if (!filaEntrega || !filaDespacho) return null;
   const tsEntrega = obtenerValorPorNombreColumna(filaEntrega, A.marca);
   const tsDespacho = obtenerValorPorNombreColumna(filaDespacho, A.marca);
-  return horasEntre(tsDespacho, tsEntrega);
+  // Planilla − Entrega (la planilla se crea despues de la entrega a logistica)
+  return horasEntre(tsEntrega, tsDespacho);
 }
 
 /* ---------------------------------------------------------------------------
@@ -719,6 +730,11 @@ function construirConsolidado() {
     });
   };
 
+  /* v3.16.0: se parte de la ASIGNACION (todo traslado asignado existe en el ciclo),
+     luego DESPACHOS y LOGISTICA sobre-escriben con los datos del avance real
+     (entrega a logistica, planilla y recepcion en punto). Asi los traslados
+     asignados pero aun no despachados aparecen como PENDIENTE. */
+  FUENTES.asignacion.forEach(agregar);
   FUENTES.despachos.forEach(agregar);
   FUENTES.logistica.forEach(agregar);
 
@@ -736,9 +752,12 @@ function construirConsolidado() {
     const fRecibido = obtenerValorPorNombreColumna(r, A.fRecibidoPto);
 
     let estado;
-    if (fRecibido) estado = 'CUMPLIDO';
-    else if (nov) estado = 'CUMPLIDO';
-    else if (fPlanilla) estado = 'EN TRANSITO';
+    /* v3.16.0: CUMPLIDO = recepcion final confirmada en punto (FECHA RECIBIDO EN PUNTO).
+       EN TRANSITO = despachado (planilla) sin recepcion. PENDIENTE = aun sin despachar.
+       Las novedades se marcan aparte (tieneNovedad) y NO fuerzan el estado a CUMPLIDO,
+       para que "Cumplidos (Recibidos)" refleje unicamente recepciones reales. */
+    if (fRecibido && aFecha(fRecibido)) estado = 'CUMPLIDO';
+    else if (fPlanilla && aFecha(fPlanilla)) estado = 'EN TRANSITO';
     else estado = 'PENDIENTE';
 
     const urgente = obtenerValorPorNombreColumna(r, A.urgente);
@@ -841,57 +860,45 @@ function urgenteEnRiesgo(t) {
  * 5. INDICADORES (KPIs) Y TIEMPOS POR PROCESO
  * ------------------------------------------------------------------------- */
 function pintarKpis(lista) {
-  // TRASLADOS: Count unique traslado numbers from ALL files in Drive folder
-  const trasladosUnicos = new Set();
-  FUENTES.trasladosConsulta.forEach(f => {
-    const clave = normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado));
-    if (clave) trasladosUnicos.add(clave);
-  });
-  const totalTraslados = trasladosUnicos.size || lista.length;
+  /* v3.16.0 — KPIs 100% derivados del CONSOLIDADO y respetando los filtros
+     (fecha / zona / bodega / estado / urgente). `lista` = trasladosFiltrados(). */
 
-  // CUMPLIDOS: Count unique Documento Traslado with asignacion from BD_ASIGNACION_DE_TRASLADO
-  const cumplidosUnicos = new Set();
-  FUENTES.asignacion.forEach(f => {
-    const clave = normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado));
-    if (clave) cumplidosUnicos.add(clave);
-  });
-  const cumplidos = cumplidosUnicos.size || lista.filter(t => t.estado === 'CUMPLIDO').length;
+  // 1. CANTIDAD DE TRASLADOS: Documento Traslado unicos procesados en el rango filtrado.
+  const totalTraslados = lista.length;
 
-  // EN TRANSITO / PENDIENTES: unique Documento Traslado planillados/en transito from Despacho sheet
-  const enTransitoUnicos = new Set();
-  FUENTES.despachoAsignacion.forEach(f => {
-    const clave = normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado));
-    if (clave) enTransitoUnicos.add(clave);
-  });
-  const pendientes = enTransitoUnicos.size || (lista.length ? lista.filter(t => t.estado !== 'CUMPLIDO').length : 0);
+  // 2. TRASLADOS CUMPLIDOS (RECIBIDOS): con recepcion final confirmada en punto de destino.
+  const cumplidos = lista.filter(t => t.fRecibido && aFecha(t.fRecibido)).length;
 
-  // URGENTES EN RIESGO: filter by Concepto = PQRS, Tutelas/Tutela, Desacato, Orden de Arresto, Jornada
+  // 3. EN TRANSITO / PENDIENTES: despachados o asignados que aun no registran recepcion.
+  const pendientes = lista.filter(t => !(t.fRecibido && aFecha(t.fRecibido))).length;
+
+  // 4. TRASLADOS URGENTES: URGENTE = SI en riesgo o pendientes.
   const urgentes = lista.filter(urgenteEnRiesgo).length;
 
+  // 5. NOVEDADES Y ANULACIONES: novedades reportadas + traslados anulados (Paso 3).
   const novedades = FUENTES.novedades.filter(n => dentroDeRango(obtenerValorPorNombreColumna(n, A.marca)));
-  const abiertas = novedades.filter(n => normalizarCabecera(obtenerValorPorNombreColumna(n, A.solucionado)) !== 'si').length;
+  const anulados = (FUENTES.traslados_anulados || []).filter(a => dentroDeRango(obtenerValorPorNombreColumna(a, A.marca)));
+  const abiertas = novedades.filter(n => !esSi(obtenerValorPorNombreColumna(n, A.solucionado))).length;
+  const totalNovAnul = novedades.length + anulados.length;
 
+  // 6. ITEMS CON DIFERENCIAS DE INVENTARIO.
   const inv = inventarioFiltrado();
   const difInv = inv.filter(i => Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) !== 0).length;
 
   $('kpi_total').textContent = totalTraslados;
   $('kpi_cumplidos').textContent = cumplidos;
   $('kpi_cumplimiento').textContent = (totalTraslados ? Math.round(cumplidos * 100 / totalTraslados) : 0) + '% de cumplimiento';
-  /* v3.15.0: Defensive — ensure all KPI elements show 0 not NaN when FUENTES empty */
-  if (!Number.isFinite(totalTraslados)) $('kpi_total').textContent = '0';
-  if (!Number.isFinite(cumplidos)) $('kpi_cumplidos').textContent = '0';
-  if (!Number.isFinite(pendientes)) $('kpi_pendientes').textContent = '0';
   $('kpi_pendientes').textContent = pendientes;
   $('kpi_urgentes').textContent = urgentes;
-  $('kpi_novedades').textContent = novedades.length;
-  $('kpi_novedades_abiertas').textContent = abiertas + ' sin solucionar';
+  $('kpi_novedades').textContent = totalNovAnul;
+  $('kpi_novedades_abiertas').textContent = anulados.length + ' anulados · ' + abiertas + ' sin solucionar';
   $('kpi_dif_inv').textContent = difInv;
 
-  // Tiempos promedio calculados cruzando fuentes por Documento Traslado
-  /* v3.15.0: defensive — if lista empty, promedio returns NaN; force 0 */
-  const pAlist = lista.length ? promedio(lista.map(t => t.tAlistamiento)) : 0;
-  const pEspera = lista.length ? promedio(lista.map(t => t.tEsperaDespacho)) : 0;
-  const pTransito = lista.length ? promedio(lista.map(t => t.tTransito)) : 0;
+  // Tiempos promedio del ciclo logistico (Alistamiento, Espera Despacho, Transito)
+  /* v3.16.0: promedio() ignora nulos; lista vacia -> null -> "--" */
+  const pAlist = lista.length ? promedio(lista.map(t => t.tAlistamiento)) : null;
+  const pEspera = lista.length ? promedio(lista.map(t => t.tEsperaDespacho)) : null;
+  const pTransito = lista.length ? promedio(lista.map(t => t.tTransito)) : null;
   $('kpi_t_alist').textContent = formatoDuracion(pAlist);
   $('kpi_t_espera').textContent = formatoDuracion(pEspera);
   $('kpi_t_transito').textContent = formatoDuracion(pTransito);
