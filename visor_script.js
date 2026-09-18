@@ -12,7 +12,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbyIhBrpDgUbY618CY6yJ7wK3T4zWvCpK1jcC7MW4C04qu60tSjAhlg2xeuB7JWllVdb/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxvG9sDl84CnLwdMPulI13yRqUajD9s5qAkAQFKerT6KMGX3J0QKT4IO2NGkPEAhG-z/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -283,10 +283,13 @@ function horasEntre(desde, hasta) {
 }
 
 function formatoDuracion(horas) {
-  if (horas === null || horas === undefined || isNaN(horas)) return '--';
+  // v3.18: estado neutral "00h 00m" en lugar de "--" cuando no hay datos.
+  if (horas === null || horas === undefined || isNaN(horas)) return '00h 00m';
   const total = Math.round(horas * 60);
   const d = Math.floor(total / 1440), h = Math.floor((total % 1440) / 60), m = total % 60;
-  return (d ? d + 'd ' : '') + (h ? h + 'h ' : '') + m + 'm';
+  const hh = String(h).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  return (d ? d + 'd ' : '') + hh + 'h ' + mm + 'm';
 }
 
 function promedio(lista) {
@@ -295,6 +298,14 @@ function promedio(lista) {
 }
 
 function esSi(v) { return normalizarCabecera(v) === 'si'; }
+
+/* Clasifica una bodega como INTERNA (CENDIS / B05 / B09) o EXTERNA (regional). */
+function esBodegaInterna(nombreBodega) {
+  const n = normalizarCabecera(nombreBodega);
+  if (!n) return false;
+  return n.indexOf('cendis') !== -1 || n.indexOf('cedis') !== -1 ||
+         n.indexOf('b05') !== -1 || n.indexOf('b09') !== -1;
+}
 
 /* ---------------------------------------------------------------------------
  * MAPA BODEGA → ZONA
@@ -534,47 +545,113 @@ function _aplicarFuentes(r) {
   console.log('[_aplicarFuentes] Filas por fuente:', conteo);
 }
 
-/** sincronizarDrive — Lee el archivo BD_CONSOLIDADO_VISOR de la carpeta de Drive
- *  (lectura directa, sin recorrer carpetas origen), actualiza datos y refresca los KPI.
- *  v3.17.0: cambiado a consolidadoDesdeCarpeta (nuevo modelo de archivo dedicado).
- *  Timeout 12s + spinner asincrono para evitar cortes de 10s.
+/** v3.18 — helpers de UI de sincronizacion (skeleton + indicador de ultima sync) */
+const LS_ULTIMA_SYNC = 'MF_ULTIMA_SYNC_VISOR';
+
+function _mostrarSkeleton(on) {
+  const sk = $('rot_skeleton');
+  const cont = $('rot_grupos_container');
+  if (sk) sk.style.display = on ? 'grid' : 'none';
+  if (cont) cont.style.display = on ? 'none' : '';
+  const panel = document.querySelector('.mf-apertura-dia');
+  if (panel) panel.classList.toggle('mf-loading', on);
+}
+
+function _setSyncInfo(estado, texto) {
+  const box = $('syncInfo');
+  const txt = $('syncInfoText');
+  if (box) { box.classList.remove('ok', 'err'); if (estado) box.classList.add(estado); }
+  if (txt) txt.textContent = texto;
+}
+
+function _fmtFechaHora(iso) {
+  try {
+    const d = iso ? new Date(iso) : new Date();
+    const p = n => String(n).padStart(2, '0');
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  } catch (e) { return String(iso || ''); }
+}
+
+/** Restaura el indicador de ultima sincronizacion al cargar la pagina */
+function restaurarUltimaSync() {
+  const prev = localStorage.getItem(LS_ULTIMA_SYNC);
+  if (prev) _setSyncInfo('ok', 'Ult. sync: ' + _fmtFechaHora(prev));
+  else _setSyncInfo('', 'Sin sincronizar');
+}
+
+/** sincronizarDrive — v3.18: lee y CONSOLIDA en tiempo real todos los archivos
+ *  (Hojas de calculo / CSV) de la carpeta de Drive mediante procesarYConsolidarDrive
+ *  (recorre iterativamente la carpeta en el backend). Muestra skeleton loader y una
+ *  confirmacion con la fecha/hora de la ultima sincronizacion exitosa.
  */
 async function sincronizarDrive() {
   const btn = $('btnSincronizarDrive');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Sincronizando...'; }
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('sincronizando');
+    btn.innerHTML = '<span class="mf-spinner-inline"></span> Sincronizando...';
+  }
+  _mostrarSkeleton(true);
+  _setSyncInfo('', 'Sincronizando...');
   $('estadoApi').className = 'badge bg-info';
   $('estadoApi').textContent = 'Sincronizando...';
-  toast('<strong>Sincronizando...</strong> Leyendo el consolidado desde Drive.', 'info', 5000);
+  toast('<strong>Sincronizando con Drive...</strong> Leyendo y consolidando los archivos de la carpeta.', 'info', 5000);
 
   try {
-    const r = await api('consolidadoDesdeCarpeta', {}, 12000); // 12s timeout (lectura de archivo directa)
+    // procesarYConsolidarDrive: recorre iterativamente la carpeta, lee cada archivo
+    // (Sheets/CSV) y reconstruye el consolidado en tiempo real. Timeout amplio (45s)
+    // porque implica recorrer la carpeta completa.
+    const r = await api('procesarYConsolidarDrive', {}, 45000);
 
     if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
       _aplicarFuentes(r);
+      const stamp = r.timestamp || new Date().toISOString();
+      localStorage.setItem(LS_ULTIMA_SYNC, stamp);
       $('estadoApi').className = 'badge bg-success';
       $('estadoApi').textContent = '✓ Sincronizado';
-      toast('✓ <strong>Sincronización completada.</strong> ' + (r.msg || Object.keys(r.fuentes).length + ' fuentes cargadas.'), 'success', 5000);
+      _setSyncInfo('ok', 'Ult. sync: ' + _fmtFechaHora(stamp));
       construirConsolidado();
       poblarFiltros();
       refrescarTodo();
+      toast('✓ <strong>Sincronizaci\u00f3n exitosa</strong> — ' +
+        (r.msg || (Object.keys(r.fuentes).length + ' fuentes consolidadas')) +
+        '<br><span class="small text-muted">\u00daltima sincronizaci\u00f3n: ' + _fmtFechaHora(stamp) + '</span>', 'success', 7000);
       console.log('[sincronizarDrive] OK — origen:', r.origen, 'fuentes:', Object.keys(r.fuentes));
     } else {
       $('estadoApi').className = 'badge bg-warning text-dark';
       $('estadoApi').textContent = 'Sin datos';
-      toast('Sin datos consolidados. En el CARGUE presione <strong>"Enviar datos al Consolidado"</strong>. ' + (r.error || ''), 'warning', 9000);
+      _setSyncInfo('err', 'Sin datos en la carpeta');
+      toast('No se encontraron registros en los archivos de la carpeta. ' + (r.error || ''), 'warning', 9000);
       console.warn('[sincronizarDrive] Sin datos:', r);
     }
   } catch (e) {
     $('estadoApi').className = 'badge bg-danger';
     $('estadoApi').textContent = 'Error sync';
+    _setSyncInfo('err', 'Error de sincronizaci\u00f3n');
+    // Fallback: intentar leer el ultimo consolidado ya generado en Drive
+    try {
+      const rf = await api('consolidadoDesdeCarpeta', {}, 12000);
+      if (rf.ok && rf.fuentes && Object.keys(rf.fuentes).length > 0) {
+        _aplicarFuentes(rf);
+        const st = rf.timestamp || new Date().toISOString();
+        localStorage.setItem(LS_ULTIMA_SYNC, st);
+        $('estadoApi').className = 'badge bg-warning text-dark';
+        $('estadoApi').textContent = 'Consolidado previo';
+        _setSyncInfo('ok', 'Ult. sync: ' + _fmtFechaHora(st));
+        construirConsolidado(); poblarFiltros(); refrescarTodo();
+        toast('La consolidaci\u00f3n en vivo no respondi\u00f3 a tiempo; se muestran los <strong>datos del \u00faltimo consolidado</strong> guardado en Drive.', 'warning', 8000);
+        return;
+      }
+    } catch (e2) { /* ignore */ }
     if (e.message === 'TIMEOUT') {
-      toast('La sincronización excedió el tiempo límite. Intente de nuevo.', 'warning', 8000);
+      toast('La sincronizaci\u00f3n excedi\u00f3 el tiempo l\u00edmite. Intente de nuevo.', 'warning', 8000);
     } else {
       toast('Error al sincronizar: ' + e.message, 'danger', 8000);
     }
     console.error('[sincronizarDrive] Exception:', e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '☁ Sincronizar Drive'; }
+    _mostrarSkeleton(false);
+    if (btn) { btn.disabled = false; btn.classList.remove('sincronizando'); btn.innerHTML = '<span class="ico-sync">\u21bb</span> Sincronizar Drive'; }
   }
 }
 
@@ -1317,9 +1394,15 @@ function pintarSeccion1(lista) {
 /* ---------- SECCION 2: recepcion tecnica ---------- */
 function recepcionFiltrada() {
   const q = normalizarCabecera(val('buscar_s2'));
+  const tipoTraslado = val('f_tipo_s2'); // '' = externos (default), 'interno', 'todos'
   return FUENTES.recepcion.filter(r => {
     const tipo = normalizarCabecera(obtenerValorPorNombreColumna(r, A.tipoRecepcion));
     if (tipo && tipo.indexOf('traslado') === -1) return false;
+    // Toggle EXTERNOS / INTERNOS segun la bodega de origen del traslado
+    const interno = esBodegaInterna(obtenerValorPorNombreColumna(r, A.origen));
+    if (tipoTraslado === 'interno' && !interno) return false;
+    if (tipoTraslado === 'todos') { /* sin filtro por tipo */ }
+    else if (tipoTraslado !== 'interno' && interno) return false; // default: solo EXTERNOS
     if (!dentroDeRango(obtenerValorPorNombreColumna(r, A.fRecepcion) || obtenerValorPorNombreColumna(r, A.marca))) return false;
     if (q && !normalizarCabecera(JSON.stringify(r)).includes(q)) return false;
     return true;
@@ -1331,7 +1414,7 @@ function pintarSeccion2() {
   const columnas = [
     { titulo: 'Fecha Recepcion Tecnica', alias: A.fRecepcion },
     { titulo: 'Documento Traslado', alias: A.traslado },
-    { titulo: 'Bodega Origen Externa', alias: A.origen },
+    { titulo: 'Bodega Origen del Traslado', alias: A.origen },
     { titulo: 'Bodega Destino (CENDIS / B05)', alias: A.destino },
     { titulo: 'Codigo Producto / Molecula', alias: A.codigo },
     { titulo: 'Descripcion', alias: A.descripcion },
@@ -1349,7 +1432,8 @@ function pintarSeccion2() {
     const estado = normalizarCabecera(obtenerValorPorNombreColumna(r, A.estadoRec));
     return (dif !== 0 || estado === 'novedad') ? 'fila-diferencia' : '';
   });
-  $('info_s2').textContent = `${filas.length} items recibidos`;
+  const tipoLbl = val('f_tipo_s2') === 'interno' ? 'internos' : (val('f_tipo_s2') === 'todos' ? '(todos)' : 'externos');
+  $('info_s2').textContent = `${filas.length} items recibidos · ${tipoLbl}`;
 }
 
 /* ---------- SECCION 3: novedades ---------- */
@@ -1382,7 +1466,12 @@ function inventarioFiltrado() {
   return FUENTES.inventario.filter(i => {
     const fecha = obtenerValorPorNombreColumna(i, ['Fecha Verificacion']) || obtenerValorPorNombreColumna(i, A.marca);
     if (!dentroDeRango(fecha)) return false;
-    if (bod && normalizarCabecera(obtenerValorPorNombreColumna(i, A.bodegaInv)).indexOf(normalizarCabecera(bod)) === -1) return false;
+    if (bod) {
+      const bodRow = normalizarCabecera(obtenerValorPorNombreColumna(i, A.bodegaInv));
+      // B09 se resuelve por prefijo 'b09' (la fila puede traer solo 'B09' o el nombre largo)
+      const bodKey = normalizarCabecera(bod).indexOf('b09') === 0 ? 'b09' : normalizarCabecera(bod);
+      if (bodRow.indexOf(bodKey) === -1) return false;
+    }
     if (soloDif && Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) === 0) return false;
     if (q && !normalizarCabecera(JSON.stringify(i)).includes(q)) return false;
     return true;
@@ -1393,7 +1482,7 @@ function pintarSeccion4() {
   const filas = inventarioFiltrado();
   const columnas = [
     { titulo: 'Fecha Verificacion', fn: i => obtenerValorPorNombreColumna(i, ['Fecha Verificacion']) || obtenerValorPorNombreColumna(i, A.marca) },
-    { titulo: 'Bodega (CENDIS / B05)', alias: A.bodegaInv },
+    { titulo: 'Bodega (CENDIS / B05 / B09)', alias: A.bodegaInv },
     { titulo: 'Responsable Asignado', alias: A.respInv },
     { titulo: 'Molecula / Medicamento', alias: A.molecula },
     { titulo: 'Codigo Producto', alias: ['Codigo Producto', 'Codigo Producto / Molecula'] },
@@ -1421,21 +1510,21 @@ function pintarSeccion4() {
  ------------------------------------------------------------------------- */
 
 const GRUPOS_FIJOS = [
-  { nombre: 'Grupo 1', numero: 1, color: '#FFB3B3', hex: '#dc3545', miembros: ['Angie Mar\u00eda Tascon', 'Estefania Parra', 'Nicoll Trivi\u00f1o'], lider: 'LUISA' },
-  { nombre: 'Grupo 2', numero: 2, color: '#FFDAB9', hex: '#FF8C00', miembros: ['Juan David Donato Moreno', 'Natalia Galvez', 'Daniela Nore\u00f1a'], lider: 'ADMINISTRATIVO' },
-  { nombre: 'Grupo 3', numero: 3, color: '#B0E0E6', hex: '#0d6efd', miembros: ['Ana Lorena Ortiz', 'Karina Riascos', 'Vanesa Escobar'], lider: 'LUISA' },
-  { nombre: 'Grupo 4', numero: 4, color: '#C8F7C5', hex: '#2fb457', miembros: ['Leidy Valencia', 'Bivian Lorena Rivera', 'Brayan Camilo Izquierdo'], lider: 'LUZ' },
-  { nombre: 'Grupo 5', numero: 5, color: '#D8BFD8', hex: '#6f42c1', miembros: ['Claudia Echeverry', 'Kelly Jhojana Beltran Benjumea', 'Luz Lopez'], lider: 'LUZ' },
-  { nombre: 'Grupo 6', numero: 6, color: '#FFFACD', hex: '#ffc107', miembros: ['Derly Yulieth Mosquera', 'Liz Karime Valencia', 'Angela Vanessa Aguirre'], lider: 'LUZ' },
-  { nombre: 'Grupo 7', numero: 7, color: '#FFD0EC', hex: '#FF00FF', miembros: ['Luis Felipe Marin', 'Manuel David Salazar'], lider: 'ADMINISTRATIVO' },
-  { nombre: 'Grupo 8', numero: 8, color: '#D4F1F9', hex: '#17a2b8', miembros: ['Mayra Alejandra Franco Muñoz', 'Camila Posada', 'Julieth Cardenas'], lider: 'ANDREA' },
-  { nombre: 'Grupo 9', numero: 9, color: '#E0E0E0', hex: '#6c757d', miembros: ['Jhony Saenz Sanchez', 'Valentina Cano Peña', 'Yeimy Aldana'], lider: 'LUISA' },
-  { nombre: 'B09-1', numero: 9, color: '#B0E0E6', hex: '#17a2b8', miembros: ['Jose Santiago Ramirez Obando'], lider: 'Jose Santiago Ramirez Obando' },
-  { nombre: 'B09-2', numero: 10, color: '#FFD0EC', hex: '#e83e8c', miembros: ['Yuliana Andrea Quira Manquillo'], lider: 'Yuliana Andrea Quira Manquillo' },
-  { nombre: 'B09-3', numero: 11, color: '#C8F7C5', hex: '#20c997', miembros: ['Luisa Fernanda Garcia Orozco'], lider: 'Luisa Fernanda Garcia Orozco' },
-  { nombre: 'B09-4', numero: 12, color: '#FFDAB9', hex: '#fd7e14', miembros: ['Nedi Yojana Zamora Yandi'], lider: 'Nedi Yojana Zamora Yandi' },
-  { nombre: 'B09-5', numero: 13, color: '#D8BFD8', hex: '#6f42c1', miembros: ['Beatriz Eugenia Urbano Botina'], lider: 'Beatriz Eugenia Urbano Botina' },
-  { nombre: 'B09-6', numero: 14, color: '#E0E0E0', hex: '#343a40', miembros: ['Mery Yolanda Cadavid Bermudez'], lider: 'Mery Yolanda Cadavid Bermudez' }
+  { nombre: 'Grupo 1', numero: 1, tipo: 'cendis', hex: '#2563eb', miembros: ['Angie Mar\u00eda Tascon', 'Estefania Parra', 'Nicoll Trivi\u00f1o'], lider: 'LUISA' },
+  { nombre: 'Grupo 2', numero: 2, tipo: 'cendis', hex: '#0891b2', miembros: ['Juan David Donato Moreno', 'Natalia Galvez', 'Daniela Nore\u00f1a'], lider: 'ADMINISTRATIVO' },
+  { nombre: 'Grupo 3', numero: 3, tipo: 'cendis', hex: '#16a34a', miembros: ['Ana Lorena Ortiz', 'Karina Riascos', 'Vanesa Escobar'], lider: 'LUISA' },
+  { nombre: 'Grupo 4', numero: 4, tipo: 'cendis', hex: '#65a30d', miembros: ['Leidy Valencia', 'Bivian Lorena Rivera', 'Brayan Camilo Izquierdo'], lider: 'LUZ' },
+  { nombre: 'Grupo 5', numero: 5, tipo: 'cendis', hex: '#7c3aed', miembros: ['Claudia Echeverry', 'Kelly Jhojana Beltran Benjumea', 'Luz Lopez'], lider: 'LUZ' },
+  { nombre: 'Grupo 6', numero: 6, tipo: 'cendis', hex: '#d97706', miembros: ['Derly Yulieth Mosquera', 'Liz Karime Valencia', 'Angela Vanessa Aguirre'], lider: 'LUZ' },
+  { nombre: 'Grupo 7', numero: 7, tipo: 'cendis', hex: '#db2777', miembros: ['Luis Felipe Marin', 'Manuel David Salazar'], lider: 'ADMINISTRATIVO' },
+  { nombre: 'Grupo 8', numero: 8, tipo: 'cendis', hex: '#0d9488', miembros: ['Mayra Alejandra Franco Muñoz', 'Camila Posada', 'Julieth Cardenas'], lider: 'ANDREA' },
+  { nombre: 'Grupo 9', numero: 9, tipo: 'cendis', hex: '#64748b', miembros: ['Jhony Saenz Sanchez', 'Valentina Cano Peña', 'Yeimy Aldana'], lider: 'LUISA' },
+  { nombre: 'B09-1', numero: 10, tipo: 'b09', hex: '#0891b2', miembros: ['Jose Santiago Ramirez Obando'], lider: 'Jose Santiago Ramirez Obando' },
+  { nombre: 'B09-2', numero: 11, tipo: 'b09', hex: '#db2777', miembros: ['Yuliana Andrea Quira Manquillo'], lider: 'Yuliana Andrea Quira Manquillo' },
+  { nombre: 'B09-3', numero: 12, tipo: 'b09', hex: '#16a34a', miembros: ['Luisa Fernanda Garcia Orozco'], lider: 'Luisa Fernanda Garcia Orozco' },
+  { nombre: 'B09-4', numero: 13, tipo: 'b09', hex: '#d97706', miembros: ['Nedi Yojana Zamora Yandi'], lider: 'Nedi Yojana Zamora Yandi' },
+  { nombre: 'B09-5', numero: 14, tipo: 'b09', hex: '#7c3aed', miembros: ['Beatriz Eugenia Urbano Botina'], lider: 'Beatriz Eugenia Urbano Botina' },
+  { nombre: 'B09-6', numero: 15, tipo: 'b09', hex: '#334155', miembros: ['Mery Yolanda Cadavid Bermudez'], lider: 'Mery Yolanda Cadavid Bermudez' }
 ];
 
 /** Genera la lista de grupos del dia (fija, sin rotacion). */
@@ -1446,58 +1535,78 @@ function generarGruposDelDia() {
   }));
 }
 
-/** Pinta los 14 grupos fijos en el panel de Apertura del Dia */
+/** Pinta los grupos fijos en el panel de Apertura del Dia (Clean UI corporativo) */
 function pintarAperturaDia() {
   const cont = $('rot_grupos_container');
   const info = $('info_rotacion');
 
+  // Filtro por vista: fijos (todos) / cendis / b09
+  const vista = (val('rot_vista') || 'fijos');
+  const grupos = GRUPOS_FIJOS.filter(g => {
+    if (vista === 'cendis') return g.tipo === 'cendis';
+    if (vista === 'b09') return g.tipo === 'b09';
+    return true;
+  });
+
   if (cont) {
     cont.innerHTML = '';
-    let idxCol = 0;
-    const cols = ['col-md-3', 'col-md-3', 'col-md-3', 'col-md-3'];
 
-    GRUPOS_FIJOS.forEach(grupo => {
+    grupos.forEach(grupo => {
+      // Responsive Grid: 4 columnas en alta resolucion, 2 en tablet, 1 en movil
       const col = document.createElement('div');
-      col.className = cols[idxCol % 4];
+      col.className = 'col-xl-3 col-lg-4 col-md-6 col-12';
 
       const card = document.createElement('div');
       card.className = 'rot-grupo-card';
       card.style.borderLeftColor = grupo.hex;
-      card.style.background = grupo.color;
 
+      // Encabezado: titulo (sin redundancia) + lider
       const header = document.createElement('div');
       header.className = 'rot-grupo-card-header';
-      header.style.background = grupo.hex;
-      const lightColors = ['#FFD0EC', '#FFDAB9', '#C8F7C5', '#FFB3B3', '#D8BFD8', '#FFFACD', '#B0E0E6', '#E0E0E0', '#FF7F7F', '#B0E8E8', '#E6E6FA', '#C8E6C8', '#FFD1DC', '#D4A76A'];
-      header.style.color = lightColors.includes(grupo.color) ? (grupo.hex === '#ffc107' ? '#000' : '#fff') : '#fff';
-      // Mejor contraste: si el hex es claro, usar texto oscuro
-      const isLightHex = ['#ffc107', '#FF8C00'].some(c => grupo.hex === c);
-      header.style.color = isLightHex ? '#000' : '#fff';
-      header.innerHTML = '&#11044; Grupo ' + esc(grupo.nombre) + ' (' + grupo.numero + ')';
-      if (grupo.lider) header.innerHTML += ' &mdash; L&iacute;der: ' + esc(grupo.lider);
+
+      const titulo = document.createElement('div');
+      titulo.className = 'rot-grupo-titulo';
+      titulo.innerHTML =
+        '<span class="rot-grupo-dot" style="background:' + grupo.hex + '"></span>' +
+        '<span>' + esc(grupo.nombre) + '</span>' +
+        '<span class="rot-grupo-conteo ms-auto">' + grupo.miembros.length + ' ' +
+        (grupo.miembros.length === 1 ? 'integrante' : 'integrantes') + '</span>';
+      header.appendChild(titulo);
+
+      if (grupo.lider) {
+        const lider = document.createElement('div');
+        lider.className = 'rot-grupo-lider';
+        lider.innerHTML = '<span class="lbl">L\u00edder:</span> ' + esc(grupo.lider);
+        header.appendChild(lider);
+      }
       card.appendChild(header);
 
+      // Cuerpo: integrantes tabulados y numerados
       const body = document.createElement('div');
       body.className = 'rot-grupo-card-body';
-
-      grupo.miembros.forEach(nombre => {
+      grupo.miembros.forEach((nombre, i) => {
         const row = document.createElement('div');
         row.className = 'rot-grupo-miembro';
-        row.textContent = nombre;
+        const num = document.createElement('span');
+        num.className = 'num';
+        num.textContent = (i + 1);
+        const txt = document.createElement('span');
+        txt.textContent = nombre;
+        row.appendChild(num);
+        row.appendChild(txt);
         body.appendChild(row);
       });
-
       card.appendChild(body);
+
       col.appendChild(card);
       cont.appendChild(col);
-      idxCol++;
     });
   }
 
   /* Info banner */
   if (info) {
-    const total = GRUPOS_FIJOS.reduce((s, g) => s + g.miembros.length, 0);
-    info.innerHTML = '<span class="badge bg-success">8 grupos fijos &mdash; ' + total + ' personas</span>';
+    const total = grupos.reduce((s, g) => s + g.miembros.length, 0);
+    info.innerHTML = '<span class="badge bg-secondary">' + grupos.length + ' grupos &middot; ' + total + ' personas</span>';
   }
 }
 
@@ -1884,6 +1993,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Botones de Apertura del Dia
   if ($('btnGuardarRotacion')) $('btnGuardarRotacion').addEventListener('click', accionGuardarRotacion);
+  if ($('rot_vista')) $('rot_vista').addEventListener('change', pintarAperturaDia);
   if ($('rot_fecha')) {
     $('rot_fecha').addEventListener('change', function() { accionCargarRotacionFecha(); refrescarTodo(); });
     /* Default: fecha de hoy */
@@ -1893,7 +2003,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   $('btnLimpiarFiltros').addEventListener('click', () => {
     ['f_desde', 'f_hasta', 'f_origen', 'f_destino', 'f_zona', 'f_estado', 'f_urgente',
-     'f_bodega_inv', 'f_solo_dif', 'f_zona_log', 'f_revisado_log',
+     'f_bodega_inv', 'f_solo_dif', 'f_zona_log', 'f_revisado_log', 'f_tipo_s2',
      'buscar_s1', 'buscar_s2', 'buscar_s3', 'buscar_s4', 'buscar_s5', 'buscar_traslado_5']
       .forEach(id => { if ($(id)) $(id).value = ''; });
     refrescarTodo();
@@ -1901,9 +2011,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   ['buscar_s1', 'buscar_s2', 'buscar_s3', 'buscar_s4', 'buscar_s5', 'buscar_traslado_5', 'f_bodega_inv', 'f_solo_dif']
     .forEach(id => { if ($(id)) $(id).addEventListener('input', refrescarTodo); });
-  ['f_desde', 'f_hasta', 'f_origen', 'f_destino', 'f_zona', 'f_estado', 'f_urgente', 'f_zona_log', 'f_revisado_log']
+  ['f_desde', 'f_hasta', 'f_origen', 'f_destino', 'f_zona', 'f_estado', 'f_urgente', 'f_zona_log', 'f_revisado_log', 'f_tipo_s2']
     .forEach(id => { if ($(id)) $(id).addEventListener('change', refrescarTodo); });
 
+  restaurarUltimaSync();
   cargarDatos();
 
   // Actualizacion automatica cada 5 minutos.
