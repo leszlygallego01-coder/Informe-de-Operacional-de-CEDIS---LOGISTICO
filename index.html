@@ -16,6 +16,10 @@
   </script>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Tipografia corporativa Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <!-- Tom Select: dropdown buscable -->
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
@@ -252,14 +256,16 @@
       <div class="mf-sub">Seguimiento de traslados, rotacion diaria, novedades, inventario y metricas &middot; Google Drive</div>
     </div>
   </div>
-  <div class="d-flex align-items-center gap-2">
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <span class="mf-sync-info" id="syncInfo"><span class="dot"></span><span id="syncInfoText">Sin sincronizar</span></span>
     <span id="estadoApi" class="badge bg-light text-dark">Sin datos</span>
-    <button class="btn btn-success btn-sm" id="btnSincronizarDrive" title="Leer datos consolidados de BD_CONSOLIDADO_DRIVE (respuesta rapida <2s)">&#9729; Sincronizar Drive</button>
-    <button class="btn btn-outline-info btn-sm" id="btnProbarApi" title="Probar conexion con Google Drive">&#127760; Probar Conexion</button>
-    <button class="btn btn-light btn-sm" id="btnRefrescar">&#8635; Actualizar datos</button>
-    <button class="btn btn-light btn-sm" id="btnExportar">&#8681; Exportar consolidado</button>
-    <button class="btn btn-outline-light btn-sm" id="btnCerrarSesionVisor">&#128274; Cerrar Sesion</button>
-    <a class="btn btn-outline-light btn-sm" href="https://leszlygallego01-coder.github.io/Cargue-CENDIS---LOGISTICA/">&larr; Ir al CARGUE</a>
+    <!-- v3.19.0: Boton "Sincronizar Drive" ELIMINADO. El VISOR lee las fuentes de
+         Drive de forma automatica al abrir y se refresca en segundo plano. -->
+    <button class="btn btn-sm mf-btn-soft" id="btnProbarApi" title="Probar conexion con Google Drive">&#127760; Probar Conexi&oacute;n</button>
+    <button class="btn btn-sm mf-btn-soft" id="btnRefrescar" title="Recargar datos del consolidado">&#8635; Actualizar</button>
+    <button class="btn btn-sm mf-btn-soft" id="btnExportar" title="Exportar consolidado a Excel">&#8681; Exportar</button>
+    <button class="btn btn-sm mf-btn-soft" id="btnCerrarSesionVisor">&#128274; Cerrar Sesi&oacute;n</button>
+    <a class="btn btn-sm mf-btn-soft" href="https://leszlygallego01-coder.github.io/Cargue-CENDIS---LOGISTICA/">&larr; CARGUE</a>
   </div>
 </nav>
 
@@ -298,50 +304,70 @@
   <!-- ============================ APERTURA DEL DIA — 8 Grupos Fijos ============================ -->
   <div class="mf-panel mf-apertura-dia mb-3">
     <div class="mf-panel-header d-flex justify-content-between align-items-center">
-      <span>&#128337; APERTURA DEL DIA &mdash; Grupos de Operaci&oacute;n</span>
-      <span class="d-flex align-items-center gap-2">
+      <span>&#128337; Apertura del D&iacute;a &mdash; Grupos de Operaci&oacute;n</span>
+      <span class="d-flex align-items-center gap-2 flex-wrap">
         <span class="small text-muted" id="info_rotacion"></span>
-        <button class="btn btn-sm btn-success" id="btnGuardarRotacion">&#128190; Guardar en Drive</button>
+        <button class="btn btn-sm btn-outline-secondary" id="btnGuardarRotacion" title="Guardar los grupos del d&iacute;a en Google Drive">&#128190; Guardar en Drive</button>
       </span>
     </div>
     <div class="mf-panel-body">
-      <div class="row g-2 mb-2">
-        <div class="col-md-3"><label class="form-label small fw-bold">Fecha de la Apertura</label>
+      <div class="row g-2 mb-3 align-items-end">
+        <div class="col-md-3"><label class="form-label small fw-bold text-uppercase" style="letter-spacing:.3px;color:var(--mf-texto-2)">Fecha de la Apertura</label>
           <input type="date" class="form-control form-control-sm" id="rot_fecha"></div>
-        <div class="col-md-9"><span id="rot_estado" class="mf-estado"></span></div>
+        <div class="col-md-4">
+          <div class="mf-view-select w-100">
+            <label for="rot_vista">Vista</label>
+            <select class="form-select form-select-sm border-0 bg-transparent" id="rot_vista">
+              <option value="fijos" selected>Grupos fijos del d&iacute;a</option>
+              <option value="cendis">Solo CENDIS (1-9)</option>
+              <option value="b09">Solo Auxiliares B09</option>
+            </select>
+          </div>
+        </div>
+        <div class="col-md-5 text-md-end"><span id="rot_estado" class="mf-estado"></span></div>
       </div>
-      <!-- 8 Grupos Fijos codificados por color -->
+      <!-- Skeleton loader (visible durante la sincronizacion) -->
+      <div id="rot_skeleton" class="mf-skeleton-grid mb-2" style="display:none">
+        <div class="mf-skel-card"><div class="mf-skel-line w70"></div><div class="mf-skel-line w40"></div><div class="mf-skel-line w90"></div><div class="mf-skel-line w90"></div></div>
+        <div class="mf-skel-card"><div class="mf-skel-line w70"></div><div class="mf-skel-line w40"></div><div class="mf-skel-line w90"></div><div class="mf-skel-line w90"></div></div>
+        <div class="mf-skel-card"><div class="mf-skel-line w70"></div><div class="mf-skel-line w40"></div><div class="mf-skel-line w90"></div><div class="mf-skel-line w90"></div></div>
+        <div class="mf-skel-card"><div class="mf-skel-line w70"></div><div class="mf-skel-line w40"></div><div class="mf-skel-line w90"></div><div class="mf-skel-line w90"></div></div>
+      </div>
+      <!-- Grupos fijos -->
       <div class="row g-2" id="rot_grupos_container"></div>
     </div>
   </div>
 
   <!-- ============================ KPIs ============================ -->
   <div class="row g-3 mb-3" id="kpiRow">
-    <div class="col-md-2 col-6"><div class="kpi-card"><div class="kpi-label">Cantidad de Traslados</div>
+    <div class="col-md-2 col-6"><div class="kpi-card azul"><div class="kpi-label">Cantidad de Traslados</div>
       <div class="kpi-valor" id="kpi_total">0</div><div class="kpi-detalle">Documento Traslado en el rango filtrado</div></div></div>
     <div class="col-md-2 col-6"><div class="kpi-card verde"><div class="kpi-label">Cumplidos (Recibidos)</div>
-      <div class="kpi-valor text-success" id="kpi_cumplidos">0</div><div class="kpi-detalle" id="kpi_cumplimiento">0% de cumplimiento</div></div></div>
-    <div class="col-md-2 col-6"><div class="kpi-card ambar"><div class="kpi-label">En transito / Pendientes</div>
-      <div class="kpi-valor" id="kpi_pendientes">0</div><div class="kpi-detalle">despachados/asignados sin recepcion</div></div></div>
+      <div class="kpi-valor" id="kpi_cumplidos">0</div><div class="kpi-detalle" id="kpi_cumplimiento">0% de cumplimiento</div></div></div>
+    <div class="col-md-2 col-6"><div class="kpi-card ambar"><div class="kpi-label">En Tr&aacute;nsito / Pendientes</div>
+      <div class="kpi-valor" id="kpi_pendientes">0</div><div class="kpi-detalle">despachados/asignados sin recepci&oacute;n</div></div></div>
     <div class="col-md-2 col-6"><div class="kpi-card rojo"><div class="kpi-label">Traslados Urgentes</div>
-      <div class="kpi-valor text-danger" id="kpi_urgentes">0</div><div class="kpi-detalle">URGENTE = SI en riesgo o pendientes</div></div></div>
-    <div class="col-md-2 col-6"><div class="kpi-card rojo"><div class="kpi-label">Novedades / Anulaciones</div>
+      <div class="kpi-valor" id="kpi_urgentes">0</div><div class="kpi-detalle">URGENTE = SI en riesgo o pendientes</div></div></div>
+    <div class="col-md-2 col-6"><div class="kpi-card ambar"><div class="kpi-label">Novedades / Anulaciones</div>
       <div class="kpi-valor" id="kpi_novedades">0</div><div class="kpi-detalle" id="kpi_novedades_abiertas">0 anulados &middot; 0 sin solucionar</div></div></div>
-    <div class="col-md-2 col-6"><div class="kpi-card"><div class="kpi-label">Diferencias de Inventario</div>
-      <div class="kpi-valor text-danger" id="kpi_dif_inv">0</div><div class="kpi-detalle">items con faltante/sobrante</div></div></div>
+    <div class="col-md-2 col-6"><div class="kpi-card rojo"><div class="kpi-label">Diferencias de Inventario</div>
+      <div class="kpi-valor" id="kpi_dif_inv">0</div><div class="kpi-detalle">items con faltante/sobrante</div></div></div>
   </div>
 
   <!-- ============================ TIEMPOS Y GRAFICAS ============================ -->
   <div class="row g-3 mb-1">
-    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo de Alistamiento (prom.)</div>
-      <div class="kpi-valor" id="kpi_t_alist">--</div>
-      <div class="kpi-detalle">FECHA ENTREGA LOGISTICA &minus; FECHA ASIGNACION TRASLADO</div></div></div>
-    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo de Espera Despacho (prom.)</div>
-      <div class="kpi-valor" id="kpi_t_espera">--</div>
-      <div class="kpi-detalle">FECHA CREACION/ENVIO PLANILLA &minus; FECHA ENTREGA LOGISTICA</div></div></div>
-    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Tiempo en Transito (prom.)</div>
-      <div class="kpi-valor" id="kpi_t_transito">--</div>
-      <div class="kpi-detalle">FECHA RECIBIDO EN PUNTO &minus; FECHA CREACION/ENVIO PLANILLA</div></div></div>
+    <div class="col-md-4"><div class="kpi-card azul"><div class="kpi-label">Tiempo de Alistamiento (prom.)</div>
+      <div class="kpi-valor" id="kpi_t_alist">00h 00m</div>
+      <div class="kpi-detalle">Promedio del tiempo de preparaci&oacute;n por traslado</div>
+      <div class="kpi-formula">f(x) = FECHA ENTREGA LOGISTICA &minus; FECHA ASIGNACION TRASLADO</div></div></div>
+    <div class="col-md-4"><div class="kpi-card ambar"><div class="kpi-label">Tiempo de Espera Despacho (prom.)</div>
+      <div class="kpi-valor" id="kpi_t_espera">00h 00m</div>
+      <div class="kpi-detalle">Promedio de espera hasta el env&iacute;o de planilla</div>
+      <div class="kpi-formula">f(x) = FECHA CREACION/ENVIO PLANILLA &minus; FECHA ENTREGA LOGISTICA</div></div></div>
+    <div class="col-md-4"><div class="kpi-card verde"><div class="kpi-label">Tiempo en Tr&aacute;nsito (prom.)</div>
+      <div class="kpi-valor" id="kpi_t_transito">00h 00m</div>
+      <div class="kpi-detalle">Promedio del recorrido hasta recepci&oacute;n en punto</div>
+      <div class="kpi-formula">f(x) = FECHA RECIBIDO EN PUNTO &minus; FECHA CREACION/ENVIO PLANILLA</div></div></div>
   </div>
 
   <div class="row g-3">
@@ -377,11 +403,17 @@
   <!-- ============================ SECCION 2 ============================ -->
   <div class="mf-panel">
     <div class="mf-panel-header">
-      <span>2. MONITOR DE RECEPCION TECNICA DE TRASLADOS EXTERNOS</span>
+      <span>2. MONITOR DE RECEPCION TECNICA DE TRASLADOS</span>
       <span class="small text-muted" id="info_s2"></span>
     </div>
     <div class="mf-panel-body">
-      <input class="form-control form-control-sm mb-2" id="buscar_s2" placeholder="Buscar por traslado, producto, lote...">
+      <div class="row g-2 mb-2">
+        <div class="col-md-4"><select class="form-select form-select-sm" id="f_tipo_s2">
+          <option value="">Traslados EXTERNOS (regionales)</option>
+          <option value="interno">Traslados INTERNOS (CENDIS / B05 / B09)</option>
+          <option value="todos">Todos los traslados</option></select></div>
+        <div class="col-md-8"><input class="form-control form-control-sm" id="buscar_s2" placeholder="Buscar por traslado, producto, lote..."></div>
+      </div>
       <div class="tabla-scroll"><table class="table table-sm table-bordered tabla-visor mb-0">
         <thead><tr id="head_s2"></tr></thead><tbody id="body_s2"></tbody></table></div>
     </div>
@@ -414,7 +446,7 @@
     <div class="mf-panel-body">
       <div class="row g-2 mb-2">
         <div class="col-md-3"><select class="form-select form-select-sm" id="f_bodega_inv">
-          <option value="">Todas las bodegas</option><option>CENDIS</option><option>B05</option></select></div>
+          <option value="">Todas las bodegas</option><option>CENDIS</option><option>B05</option><option>B09 POPAYAN PARQUE INDUSTRIAL CAUCA</option></select></div>
         <div class="col-md-3"><select class="form-select form-select-sm" id="f_solo_dif">
           <option value="">Todos los items</option><option value="1">Solo con diferencia</option></select></div>
         <div class="col-md-6"><input class="form-control form-control-sm" id="buscar_s4" placeholder="Buscar por molecula, codigo, lote..."></div>
