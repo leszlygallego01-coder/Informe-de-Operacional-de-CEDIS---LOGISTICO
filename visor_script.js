@@ -12,7 +12,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbysB3xyiUAL3XG-RafvJBfh2q7wLK7fivXljMWde1nAmtB56bJuMW-gsGNNIopuQqkm/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbzRFVSHTlNgbHqPobJ9Th9TZaAS36pLXqQu15nwMmARQm6_OQKYHhG0fcJaHhDqMz9M/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -72,7 +72,7 @@ function cargarConfigVisor() {
 let CONFIG = cargarConfigVisor();
 
 /** Datos crudos por fuente y datos derivados. */
-let FUENTES = { despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [], trasladosConsulta: [], asignacion: [], entregaLogistica: [], despachoAsignacion: [], traslados_anulados: [] };
+let FUENTES = { general: [], despachos: [], logistica: [], recepcion: [], novedades: [], inventario: [], facturacion: [], seguridad: [], rotacion: [], trasladosConsulta: [], asignacion: [], entregaLogistica: [], despachoAsignacion: [], traslados_anulados: [] };
 let TRASLADOS = [];    // consolidado calculado
 let CHARTS = {};
 // Los grupos son fijos — no se necesita ROTACION_DIA ni historial
@@ -449,31 +449,29 @@ async function cargarDatos() {
     return;
   }
 
-  // ── MODO API: LECTURA DIRECTA de las carpetas/fuentes (v3.20.0) ──
-  // FASE 1: Lectura DIRECTA de Drive (procesarYConsolidarDrive) — lee TODAS las
-  //   carpetas/fuentes originales (novedades, inventario, logistica, recepcion,
-  //   traslados_anulados) + overlay directo por fileId+gid. NO usa el archivo
-  //   consolidado intermedio. Timeout amplio (45s) porque lee Drive en vivo.
-  // FASE 2: Retry con timeout mayor (60s) si la primera lectura no entregó datos.
-  // Si ambas fallan, se muestra error y botón "Sincronizar Drive".
+  // ── MODO API: LECTURA EXCLUSIVA del CONSOLIDADOR MAESTRO (v3.20.0) ──
+  // El VISOR lee UNICAMENTE las 5 pestanas del maestro (CONSOLIDADOR_GENERAL,
+  // RECEPCION_TECNICA, NOVEDADES_ANULACIONES, INVENTARIO_CENDIS_B05,
+  // LOGISTICA_DESPACHOS). Carga TODO el dataset en memoria para KPIs exactos y
+  // renderiza solo los primeros 100 registros por tabla.
+  // FASE 1: lectura del maestro (timeout 20s). FASE 2: retry (timeout 40s).
 
   let exito = false;
 
-  // ── FASE 1: Lectura DIRECTA de las fuentes de Drive ──
+  // ── FASE 1: Lectura del CONSOLIDADOR MAESTRO ──
   try {
-    console.log('[cargarDatos] FASE 1: Lectura DIRECTA de las fuentes de Drive (timeout 45s)...');
-    $('estadoApi').textContent = 'Leyendo Drive (directo)...';
-    const r = await api('procesarYConsolidarDrive', {}, 45000);
+    console.log('[cargarDatos] FASE 1: Leyendo CONSOLIDADOR MAESTRO (5 pestanas, timeout 20s)...');
+    $('estadoApi').textContent = 'Leyendo maestro...';
+    const r = await api('consolidadoDesdeMaestro', {}, 20000);
 
     if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
-      console.log('[cargarDatos] ✓ Datos DIRECTOS disponibles. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
+      console.log('[cargarDatos] ✓ Maestro disponible. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
       _aplicarFuentes(r);
       $('estadoApi').className = 'badge bg-success';
-      $('estadoApi').textContent = '✓ Datos en vivo';
+      $('estadoApi').textContent = r.origen === 'maestro' ? 'Maestro OK' : (r.origen === 'carpeta' ? 'Consolidado OK' : 'Datos OK');
       exito = true;
     } else if (r.ok === false) {
-      // Sin datos — pasar a FASE 2
-      console.warn('[cargarDatos] Lectura directa sin datos (origen=' + r.origen + '), reintentando...');
+      console.warn('[cargarDatos] Maestro sin datos (origen=' + r.origen + '), reintentando...');
     } else {
       console.warn('[cargarDatos] Respuesta inesperada en FASE 1:', r);
     }
@@ -489,20 +487,20 @@ async function cargarDatos() {
   // ── FASE 2: Si FASE 1 no entregó datos, retry con timeout mayor ──
   if (!exito) {
     try {
-      console.log('[cargarDatos] FASE 2: Reintentando lectura DIRECTA (timeout 60s)...');
+      console.log('[cargarDatos] FASE 2: Reintentando lectura del maestro (timeout 40s)...');
       $('estadoApi').className = 'badge bg-warning text-dark';
       $('estadoApi').textContent = 'Reintentando...';
-      toast('Reintentando la lectura directa desde las fuentes de Drive...', 'info', 4000);
+      toast('Reintentando la lectura del Consolidador Maestro...', 'info', 4000);
 
-      const r2 = await api('procesarYConsolidarDrive', {}, 60000);
+      const r2 = await api('consolidadoDesdeMaestro', {}, 40000);
 
       if (r2.ok && r2.fuentes && Object.keys(r2.fuentes).length > 0) {
-        console.log('[cargarDatos] ✓ Datos DIRECTOS recibidos en FASE 2. Fuentes:', Object.keys(r2.fuentes), 'origen:', r2.origen);
+        console.log('[cargarDatos] ✓ Maestro recibido en FASE 2. Fuentes:', Object.keys(r2.fuentes), 'origen:', r2.origen);
         _aplicarFuentes(r2);
         $('estadoApi').className = 'badge bg-success';
-        $('estadoApi').textContent = '✓ Datos en vivo';
+        $('estadoApi').textContent = r2.origen === 'maestro' ? 'Maestro OK' : 'Datos OK';
         exito = true;
-        toast('✓ Datos cargados directamente desde Drive.', 'success', 3000);
+        toast('✓ Datos cargados desde el Consolidador Maestro.', 'success', 3000);
       } else {
         console.error('[cargarDatos] FASE 2: respuesta sin datos:', r2);
         $('estadoApi').className = 'badge bg-warning text-dark';
@@ -561,8 +559,9 @@ async function _refrescoDirectoBackground(forzarVisible) {
   }
   _setSyncInfo('', 'Actualizando en segundo plano...');
   try {
-    // Lectura directa + consolidacion en tiempo real (timeout amplio: 60s).
-    const r = await api('procesarYConsolidarDrive', {}, 60000);
+    // Relectura del CONSOLIDADOR MAESTRO (5 pestanas). El VISOR NO reconstruye:
+    // el maestro lo alimenta el modulo de CARGUE. Aqui solo re-leemos (timeout 40s).
+    const r = await api('consolidadoDesdeMaestro', {}, 40000);
     if (r && r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
       _aplicarFuentes(r);
       const stamp = r.timestamp || new Date().toISOString();
@@ -813,7 +812,12 @@ async function probarConexion() {
  *       Transito         = Fecha Recibido en Punto     − Fecha Creacion/Envio Planilla
  * ------------------------------------------------------------------------- */
 /** Alistamiento = ts(Entrega a Logistica) − ts(Asignacion de Traslado). */
-function calcularAlistamiento(claveTraslado) {
+function calcularAlistamiento(claveTraslado, filaMerge) {
+  if (filaMerge) {
+    const _a = obtenerValorPorNombreColumna(filaMerge, ['MF_TS_ASIGNACION']);
+    const _e = obtenerValorPorNombreColumna(filaMerge, ['MF_TS_ENTREGA']);
+    if (_a && _e) return horasEntre(_a, _e);
+  }
   const filaAsignacion = FUENTES.asignacion.find(f =>
     normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado)) === claveTraslado
   );
@@ -828,7 +832,12 @@ function calcularAlistamiento(claveTraslado) {
 }
 
 /** Espera Despacho = ts(Creacion/Envio Planilla) − ts(Entrega a Logistica). */
-function calcularEsperaDespacho(claveTraslado) {
+function calcularEsperaDespacho(claveTraslado, filaMerge) {
+  if (filaMerge) {
+    const _e = obtenerValorPorNombreColumna(filaMerge, ['MF_TS_ENTREGA']);
+    const _d = obtenerValorPorNombreColumna(filaMerge, ['MF_TS_DESPACHO']);
+    if (_e && _d) return horasEntre(_e, _d);
+  }
   const filaEntrega = FUENTES.entregaLogistica.find(f =>
     normalizarCabecera(obtenerValorPorNombreColumna(f, A.traslado)) === claveTraslado
   );
@@ -870,9 +879,17 @@ function construirConsolidado() {
      luego DESPACHOS y LOGISTICA sobre-escriben con los datos del avance real
      (entrega a logistica, planilla y recepcion en punto). Asi los traslados
      asignados pero aun no despachados aparecen como PENDIENTE. */
-  FUENTES.asignacion.forEach(agregar);
-  FUENTES.despachos.forEach(agregar);
-  FUENTES.logistica.forEach(agregar);
+  /* v3.20.0: si el CONSOLIDADOR MAESTRO trae la pestana CONSOLIDADOR_GENERAL
+     (fuente 'general', ya cruzada asignacion+despachos+logistica en el backend con
+     las marcas de cada evento incrustadas), se parte de ella. En su defecto se usa
+     el cruce clasico en cliente (asignacion → despachos → logistica). */
+  if (FUENTES.general && FUENTES.general.length) {
+    FUENTES.general.forEach(agregar);
+  } else {
+    FUENTES.asignacion.forEach(agregar);
+    FUENTES.despachos.forEach(agregar);
+    FUENTES.logistica.forEach(agregar);
+  }
 
   const novedadesPorTraslado = new Map();
   FUENTES.novedades.forEach(n => {
@@ -918,8 +935,8 @@ function construirConsolidado() {
       estado,
       tieneNovedad: !!nov,
       novedadResuelta: nov ? normalizarCabecera(obtenerValorPorNombreColumna(nov, A.solucionado)) : '',
-      tAlistamiento: calcularAlistamiento(clave),
-      tEsperaDespacho: calcularEsperaDespacho(clave),
+      tAlistamiento: calcularAlistamiento(clave, r),
+      tEsperaDespacho: calcularEsperaDespacho(clave, r),
       tTransito: horasEntre(fPlanilla, fRecibido),
       /* Campos enriquecidos */
       quienAlisto,
@@ -1385,6 +1402,33 @@ function dibujarBarrasTiempo(canvasId, labels, data, bgColors, tieneDatos) {
  * 6. RENDERIZADO DE TABLAS
  * ------------------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------------------
+ * RENDIMIENTO: LIMITE DE RENDERIZADO (Top 100) — v3.20.0
+ * Los KPIs y los filtros SIEMPRE operan sobre el dataset COMPLETO en memoria.
+ * En el DOM de cada tabla se pintan solo los primeros 100 registros mas
+ * recientes (orden por fecha descendente) para lograr carga instantanea.
+ * Al filtrar/buscar, se recalcula el subconjunto completo y se vuelven a
+ * mostrar los 100 coincidentes de mayor prioridad (mas recientes).
+ * ------------------------------------------------------------------------- */
+const TOP_VISIBLE = 100;
+
+/** Ordena una copia de `filas` por fecha descendente (mas reciente primero). */
+function _ordenarPorFechaDesc(filas, obtenerFecha) {
+  return filas.slice().sort((a, b) => {
+    const fa = aFecha(obtenerFecha(a)), fb = aFecha(obtenerFecha(b));
+    const ta = fa ? fa.getTime() : 0, tb = fb ? fb.getTime() : 0;
+    return tb - ta;
+  });
+}
+
+/** Toma los primeros TOP_VISIBLE registros para renderizar en el DOM. */
+function _top(filas) { return filas.slice(0, TOP_VISIBLE); }
+
+/** Sufijo informativo: indica cuando se estan mostrando solo los primeros 100. */
+function _sufijoTop(total, visibles) {
+  return total > visibles ? ` · mostrando ${visibles} de ${total}` : '';
+}
+
 function pintarTabla(headId, bodyId, columnas, filas, claseFila) {
   const head = $(headId), body = $(bodyId);
   head.innerHTML = columnas.map(c => `<th>${esc(c.titulo)}</th>`).join('');
@@ -1444,9 +1488,10 @@ function pintarSeccion1(lista) {
     { titulo: 'T. Transito', fn: t => formatoDuracion(t.tTransito) },
     { titulo: 'Novedad', fn: t => (t.tieneNovedad ? 'SI' : 'NO') }
   ];
-  pintarTabla('head_s1', 'body_s1', columnas, lista, t =>
+  pintarTabla('head_s1', 'body_s1', columnas,
+    _top(_ordenarPorFechaDesc(lista, t => t.marca)), t =>
     urgenteEnRiesgo(t) ? 'fila-urgente-pendiente' : (t.estado === 'CUMPLIDO' ? 'fila-cumplido' : ''));
-  $('info_s1').textContent = `${lista.length} traslados · ${lista.filter(urgenteEnRiesgo).length} urgentes en riesgo`;
+  $('info_s1').textContent = `${lista.length} traslados · ${lista.filter(urgenteEnRiesgo).length} urgentes en riesgo` + _sufijoTop(lista.length, TOP_VISIBLE);
 }
 
 /* ---------- SECCION 2: recepcion tecnica ---------- */
@@ -1485,13 +1530,14 @@ function pintarSeccion2() {
     { titulo: 'Responsable de Recepcion', alias: A.respRec },
     { titulo: 'Observaciones', alias: A.observaciones }
   ];
-  pintarTabla('head_s2', 'body_s2', columnas, filas, r => {
+  pintarTabla('head_s2', 'body_s2', columnas,
+    _top(_ordenarPorFechaDesc(filas, r => obtenerValorPorNombreColumna(r, A.fRecepcion) || obtenerValorPorNombreColumna(r, A.marca))), r => {
     const dif = Number(obtenerValorPorNombreColumna(r, A.cantRecibida) || 0) - Number(obtenerValorPorNombreColumna(r, A.cantEnviada) || 0);
     const estado = normalizarCabecera(obtenerValorPorNombreColumna(r, A.estadoRec));
     return (dif !== 0 || estado === 'novedad') ? 'fila-diferencia' : '';
   });
   const tipoLbl = val('f_tipo_s2') === 'interno' ? 'internos' : (val('f_tipo_s2') === 'todos' ? '(todos)' : 'externos');
-  $('info_s2').textContent = `${filas.length} items recibidos · ${tipoLbl}`;
+  $('info_s2').textContent = `${filas.length} items recibidos · ${tipoLbl}` + _sufijoTop(filas.length, TOP_VISIBLE);
 }
 
 /* ---------- SECCION 3: novedades ---------- */
@@ -1513,9 +1559,10 @@ function pintarSeccion3() {
     { titulo: 'SOLUCIONADO', alias: A.solucionado },
     { titulo: 'Efecto en seguimiento', fn: () => 'CUMPLIDO (conserva fecha inicial)' }
   ];
-  pintarTabla('head_s3', 'body_s3', columnas, filas, n =>
+  pintarTabla('head_s3', 'body_s3', columnas,
+    _top(_ordenarPorFechaDesc(filas, n => obtenerValorPorNombreColumna(n, A.marca))), n =>
     normalizarCabecera(obtenerValorPorNombreColumna(n, A.solucionado)) === 'si' ? 'fila-cumplido' : 'fila-diferencia');
-  $('info_s3').textContent = `${filas.length} novedades registradas`;
+  $('info_s3').textContent = `${filas.length} novedades registradas` + _sufijoTop(filas.length, TOP_VISIBLE);
 }
 
 /* ---------- SECCION 4: inventario ---------- */
@@ -1552,10 +1599,11 @@ function pintarSeccion4() {
     { titulo: 'Estado / Novedad', alias: A.estadoInv },
     { titulo: 'Observaciones', alias: A.observaciones }
   ];
-  pintarTabla('head_s4', 'body_s4', columnas, filas, i =>
+  pintarTabla('head_s4', 'body_s4', columnas,
+    _top(_ordenarPorFechaDesc(filas, i => obtenerValorPorNombreColumna(i, ['Fecha Verificacion']) || obtenerValorPorNombreColumna(i, A.marca))), i =>
     Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) !== 0 ? 'fila-diferencia' : '');
   const conDif = filas.filter(i => Number(obtenerValorPorNombreColumna(i, A.diferencia) || 0) !== 0).length;
-  $('info_s4').textContent = `${filas.length} items verificados · ${conDif} con diferencia`;
+  $('info_s4').textContent = `${filas.length} items verificados · ${conDif} con diferencia` + _sufijoTop(filas.length, TOP_VISIBLE);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1748,13 +1796,14 @@ function pintarSeccion5() {
     { titulo: 'Quien Recibio', fn: r => obtenerValorPorNombreColumna(r, A.quienRecibe) || '' },
     { titulo: 'Observaciones', alias: A.observaciones }
   ];
-  pintarTabla('head_s5', 'body_s5', columnas, filas, r => {
+  pintarTabla('head_s5', 'body_s5', columnas,
+    _top(_ordenarPorFechaDesc(filas, r => obtenerValorPorNombreColumna(r, A.marca))), r => {
     const rev = normalizarCabecera(obtenerValorPorNombreColumna(r, A.revisado));
     const urg = normalizarCabecera(obtenerValorPorNombreColumna(r, A.urgente));
     return (rev !== 'si' && urg === 'si') ? 'fila-urgente-pendiente' : (rev === 'si' ? 'fila-cumplido' : '');
   });
   const revisados = filas.filter(r => normalizarCabecera(obtenerValorPorNombreColumna(r, A.revisado)) === 'si').length;
-  $('info_s5').textContent = `${filas.length} registros · ${revisados} revisados · ${filas.length - revisados} sin revisar`;
+  $('info_s5').textContent = `${filas.length} registros · ${revisados} revisados · ${filas.length - revisados} sin revisar` + _sufijoTop(filas.length, TOP_VISIBLE);
 }
 
 function badgeRevisado(r) {
