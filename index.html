@@ -379,17 +379,17 @@
       <div class="mf-panel-body"><div class="chart-box"><canvas id="chartTiempos"></canvas></div></div></div></div>
   </div>
 
-  <!-- ============================ NAVEGACION POR SECCIONES (v3.22.0) ============================ -->
-  <ul class="nav nav-pills mf-secciones-nav flex-wrap gap-2 mb-3" id="mfSeccionesNav">
-    <li class="nav-item"><button type="button" class="nav-link active" data-seccion="1" onclick="mfMostrarSeccion(1)">1. Consolidado General</button></li>
-    <li class="nav-item"><button type="button" class="nav-link" data-seccion="2" onclick="mfMostrarSeccion(2)">2. Recepci&oacute;n T&eacute;cnica</button></li>
-    <li class="nav-item"><button type="button" class="nav-link" data-seccion="3" onclick="mfMostrarSeccion(3)">3. Novedades / Anulaciones</button></li>
-    <li class="nav-item"><button type="button" class="nav-link" data-seccion="4" onclick="mfMostrarSeccion(4)">4. Inventario</button></li>
-    <li class="nav-item"><button type="button" class="nav-link" data-seccion="5" onclick="mfMostrarSeccion(5)">5. Log&iacute;stica y Despacho</button></li>
+  <!-- ==================== NAVEGACION POR SECCIONES (TABS) ==================== -->
+  <ul class="nav nav-tabs mf-tabs-secciones mb-3 no-print" id="tabsSecciones" role="tablist">
+    <li class="nav-item"><button type="button" class="nav-link active" data-seccion="panel_s1">1. Consolidado General</button></li>
+    <li class="nav-item"><button type="button" class="nav-link" data-seccion="panel_s2">2. Recepcion Tecnica</button></li>
+    <li class="nav-item"><button type="button" class="nav-link" data-seccion="panel_s3">3. Novedades / Anulaciones</button></li>
+    <li class="nav-item"><button type="button" class="nav-link" data-seccion="panel_s4">4. Inventario (CENDIS vs B05)</button></li>
+    <li class="nav-item"><button type="button" class="nav-link" data-seccion="panel_s5">5. Logistica y Despacho</button></li>
   </ul>
 
   <!-- ============================ SECCION 1 ============================ -->
-  <div class="mf-panel mf-seccion" id="mf-sec-1">
+  <div class="mf-panel mf-seccion" id="panel_s1">
     <div class="mf-panel-header">
       <span>1. CONSOLIDADO DE TRASLADOS GENERAL</span>
       <span class="d-flex align-items-center gap-2">
@@ -410,7 +410,7 @@
   </div>
 
   <!-- ============================ SECCION 2 ============================ -->
-  <div class="mf-panel mf-seccion" id="mf-sec-2">
+  <div class="mf-panel mf-seccion" id="panel_s2" style="display:none">
     <div class="mf-panel-header">
       <span>2. MONITOR DE RECEPCION TECNICA DE TRASLADOS</span>
       <span class="small text-muted" id="info_s2"></span>
@@ -429,7 +429,7 @@
   </div>
 
   <!-- ============================ SECCION 3 ============================ -->
-  <div class="mf-panel mf-seccion" id="mf-sec-3">
+  <div class="mf-panel mf-seccion" id="panel_s3" style="display:none">
     <div class="mf-panel-header">
       <span>3. NOVEDADES, MODIFICACIONES Y ANULACIONES</span>
       <span class="small text-muted" id="info_s3"></span>
@@ -447,7 +447,7 @@
   </div>
 
   <!-- ============================ SECCION 4 ============================ -->
-  <div class="mf-panel mf-seccion" id="mf-sec-4">
+  <div class="mf-panel mf-seccion" id="panel_s4" style="display:none">
     <div class="mf-panel-header">
       <span>4. CONTROL Y VERIFICACION DE INVENTARIO (CENDIS vs B05)</span>
       <span class="small text-muted" id="info_s4"></span>
@@ -466,7 +466,7 @@
   </div>
 
   <!-- ============================ SECCION 5 ============================ -->
-  <div class="mf-panel mf-panel-logistica mf-seccion" id="mf-sec-5">
+  <div class="mf-panel mf-panel-logistica mf-seccion" id="panel_s5" style="display:none">
     <div class="mf-panel-header">
       <span>5. LOGISTICA Y DESPACHO &mdash; Recepcion y Planilla de Lectura</span>
       <span class="d-flex align-items-center gap-2">
@@ -571,28 +571,6 @@
   } else {
     initVisorTomSelects();
   }
-
-  /* ── v3.22.0: Navegacion por secciones (solo 1 de 5 visible a la vez) ── */
-  function mfMostrarSeccion(n){
-    for(var i=1;i<=5;i++){
-      var panel = document.getElementById('mf-sec-'+i);
-      if(panel) panel.style.display = (i===n) ? '' : 'none';
-    }
-    var botones = document.querySelectorAll('#mfSeccionesNav .nav-link');
-    for(var b=0;b<botones.length;b++){
-      botones[b].classList.toggle('active', String(botones[b].getAttribute('data-seccion'))===String(n));
-    }
-  }
-  window.mfMostrarSeccion = mfMostrarSeccion;
-  /* Mostrar solo la seccion 1 al cargar */
-  (function(){
-    function _initSecciones(){ mfMostrarSeccion(1); }
-    if(document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', _initSecciones);
-    } else {
-      _initSecciones();
-    }
-  })();
 </script>
 </body>
 </html>
