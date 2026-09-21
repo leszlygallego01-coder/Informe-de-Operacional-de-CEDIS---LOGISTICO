@@ -12,7 +12,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbzJKrk6OSczPfYLqTjij-EIr-fn904mQNA3JJ5KSk09ji-3Oou3VMz_9B1vxYk9DZyS/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbxO0qu_hqGOZ4cR65Xq9Ra3XnXTltykXW7gobPT-ZagEfNYRknCg4F1CbbcQzYt35qh/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
