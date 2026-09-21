@@ -518,3 +518,20 @@ body.mf-login-activo {
   border-radius: 9px; padding: 3px 6px 3px 12px;
 }
 .mf-view-select label { font-size: .7rem; font-weight: 700; text-transform: uppercase; color: var(--mf-texto-2); letter-spacing: .3px; margin: 0; }
+
+/* v3.22.0 — Navegacion por secciones (pestañas del VISOR) */
+.mf-secciones-nav { border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
+.mf-secciones-nav .nav-link {
+  color: var(--mf-azul);
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  font-weight: 600;
+  font-size: .9rem;
+  padding: .4rem .9rem;
+}
+.mf-secciones-nav .nav-link:hover { background: #e2e8f0; }
+.mf-secciones-nav .nav-link.active {
+  color: #fff;
+  background: var(--mf-azul);
+  border-color: var(--mf-azul-osc);
+}
