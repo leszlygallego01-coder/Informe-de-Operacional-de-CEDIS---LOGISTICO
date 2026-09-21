@@ -12,7 +12,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbzYMSD2N9f05EbTQaf33zlnvcoN3XruqVsI4qTf7-iKAMeBtmLX1agcf_RaNJMVFy4/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbzUjY--Nk-a30fN0CXhqpCKxrx22DI6vJwzuE8M568ghQs8p1Cu8BupWrHWLJzgrdYG/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -432,6 +432,136 @@ async function apiGetFallback(payload, timeoutMs = 8000) {
   } catch (jsonErr) {
     console.error('[api] GET: respuesta no es JSON. Primeros 500 chars:', text.substring(0, 500));
     throw new Error('La respuesta GET del servidor no es JSON.');
+  }
+}
+
+/* =================================================================================
+ * MULTI-JSON POR MODULO (v4.1.0) — carga selectiva desde el VISOR.
+ *   El VISOR consulta EN PARALELO (Promise.all) solo los modulos marcados en el
+ *   panel de checkboxes y mapea cada respuesta a FUENTES. Los tabs cuyos modulos
+ *   no se cargaron muestran "Modulo no cargado".
+ * ================================================================================= */
+
+/** Estado de carga por modulo. undefined = nunca intentado, true/false = resultado. */
+let MODULOS_CARGADOS = { general: undefined, recepcion: undefined, novedades: undefined, inventario: undefined, logistica: undefined };
+
+/** Todos los modulos de datos disponibles. */
+const MODULOS_DATOS_VISOR = ['general', 'recepcion', 'novedades', 'inventario', 'logistica'];
+
+/** Mapa modulo -> elementos del tab correspondiente. */
+const MAP_MODULO_TAB = {
+  general:    { body: 'body_s1', head: 'head_s1', info: 'info_s1' },
+  recepcion:  { body: 'body_s2', head: 'head_s2', info: 'info_s2' },
+  novedades:  { body: 'body_s3', head: 'head_s3', info: 'info_s3' },
+  inventario: { body: 'body_s4', head: 'head_s4', info: 'info_s4' },
+  logistica:  { body: 'body_s5', head: 'head_s5', info: 'info_s5' }
+};
+
+/** Lee los checkboxes del panel de seleccion y devuelve la lista de modulos marcados. */
+function _modulosSeleccionados() {
+  const chkTodos = $('selMod_todos');
+  if (chkTodos && chkTodos.checked) return MODULOS_DATOS_VISOR.slice();
+  const out = [];
+  document.querySelectorAll('.selMod').forEach(c => { if (c.checked) out.push(c.value); });
+  return out;
+}
+
+/** Pinta "Modulo no cargado" en los tabs cuyos modulos no se cargaron en esta consulta. */
+function _pintarModulosNoCargados() {
+  Object.keys(MAP_MODULO_TAB).forEach(m => {
+    if (MODULOS_CARGADOS[m] === false) {
+      const cfg = MAP_MODULO_TAB[m];
+      const head = $(cfg.head); if (head) head.innerHTML = '';
+      const body = $(cfg.body);
+      if (body) body.innerHTML = '<tr><td colspan="14" class="text-center text-muted py-5">' +
+        '<div style="font-size:2rem;line-height:1">&#128194;</div>' +
+        '<div class="mt-2"><strong>Modulo no cargado</strong></div>' +
+        '<div class="small">Marque este modulo en el panel superior y presione <strong>"Cargar / Consultar"</strong>.</div>' +
+        '</td></tr>';
+      const info = $(cfg.info); if (info) info.textContent = 'Modulo no cargado';
+    }
+  });
+}
+
+/**
+ * cargarSeleccion — Consulta EN PARALELO (Promise.all) solo los modulos marcados,
+ * mapea cada respuesta a FUENTES y re-renderiza. Los modulos no marcados se vacian
+ * y sus tabs muestran "Modulo no cargado".
+ * @param {boolean} [silencioso] — si true, evita toasts informativos (uso en background).
+ */
+async function cargarSeleccion(silencioso) {
+  const btn = $('btnCargarSeleccion');
+  const seleccion = _modulosSeleccionados();
+  if (!seleccion.length) {
+    if (!silencioso) toast('Seleccione al menos un modulo (o marque "Todos").', 'warning');
+    return;
+  }
+  if (!CONFIG.apiUrl) {
+    $('estadoApi').className = 'badge bg-warning text-dark';
+    $('estadoApi').textContent = 'Sin URL de Web App';
+    if (!silencioso) toast('Configure la URL de la Web App en Ajustes para leer datos de Drive.', 'warning');
+    return;
+  }
+
+  const htmlOrig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '\u231b Cargando...'; }
+  $('estadoApi').className = 'badge bg-light text-dark';
+  $('estadoApi').textContent = 'Cargando ' + seleccion.length + ' modulo(s)...';
+
+  // Los modulos NO seleccionados quedan como "no cargado" y con la fuente vacia.
+  MODULOS_DATOS_VISOR.forEach(m => {
+    if (seleccion.indexOf(m) === -1) { MODULOS_CARGADOS[m] = false; FUENTES[m] = []; }
+  });
+
+  try {
+    const resultados = await Promise.all(seleccion.map(m =>
+      api('obtenerConsolidadoModulo', { modulo: m }, 25000)
+        .then(r => ({ modulo: m, r: r }))
+        .catch(e => ({ modulo: m, r: { ok: false, error: e.message } }))
+    ));
+
+    let ok = 0, fallidos = [];
+    resultados.forEach(({ modulo, r }) => {
+      if (r && r.ok && Array.isArray(r.rows)) {
+        FUENTES[modulo] = r.rows;
+        MODULOS_CARGADOS[modulo] = true;
+        ok++;
+      } else {
+        FUENTES[modulo] = [];
+        MODULOS_CARGADOS[modulo] = false;
+        fallidos.push(modulo + (r && r.error ? ' (' + r.error + ')' : ''));
+      }
+    });
+
+    construirConsolidado();
+    poblarFiltros();
+    refrescarTodo();
+    _pintarModulosNoCargados();
+
+    const stamp = new Date().toISOString();
+    localStorage.setItem(LS_ULTIMA_SYNC, stamp);
+    _setSyncInfo('ok', 'Ult. consulta: ' + _fmtFechaHora(stamp));
+
+    if (ok > 0) {
+      $('estadoApi').className = 'badge bg-success';
+      $('estadoApi').textContent = ok + '/' + seleccion.length + ' modulos OK';
+      if (!silencioso) {
+        let msg = '\u2713 <strong>' + ok + ' modulo(s) cargado(s)</strong> (' + seleccion.filter(m => MODULOS_CARGADOS[m]).join(', ') + ').';
+        if (fallidos.length) msg += '<br><span class="small text-muted">Sin datos: ' + esc(fallidos.join(', ')) + '</span>';
+        toast(msg, fallidos.length ? 'warning' : 'success', 7000);
+      }
+    } else {
+      $('estadoApi').className = 'badge bg-warning text-dark';
+      $('estadoApi').textContent = 'Sin datos';
+      if (!silencioso) toast('No se pudieron cargar los modulos seleccionados. Verifique que se hayan generado desde el CARGUE.', 'warning', 8000);
+    }
+  } catch (e) {
+    $('estadoApi').className = 'badge bg-danger';
+    $('estadoApi').textContent = 'Error de carga';
+    if (!silencioso) toast('Error al consultar los modulos: ' + e.message, 'danger', 8000);
+    console.error('[cargarSeleccion] Exception:', e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = htmlOrig; }
   }
 }
 
@@ -2108,10 +2238,20 @@ document.addEventListener('DOMContentLoaded', () => {
       .forEach(m => { CONFIG.folders[m] = val('v_folder_' + m); });
     /* modoLocal eliminado v3.10.0 */
     localStorage.setItem(LS_KEY_VISOR, JSON.stringify(CONFIG));
-    cargarDatos();
+    cargarSeleccion();
   });
 
-  $('btnRefrescar').addEventListener('click', cargarDatos);
+  $('btnRefrescar').addEventListener('click', () => cargarSeleccion());
+  if ($('btnCargarSeleccion')) $('btnCargarSeleccion').addEventListener('click', () => cargarSeleccion());
+  // Checkbox "Todos" sincroniza y (des)habilita los 6 modulos.
+  const selTodos = $('selMod_todos');
+  if (selTodos) {
+    selTodos.addEventListener('change', () => {
+      document.querySelectorAll('.selMod').forEach(c => { c.checked = selTodos.checked; c.disabled = selTodos.checked; });
+    });
+    // Estado inicial: "Todos" marcado => individuales deshabilitados pero marcados.
+    document.querySelectorAll('.selMod').forEach(c => { c.disabled = selTodos.checked; });
+  }
   if ($('btnSincronizarDrive')) $('btnSincronizarDrive').addEventListener('click', sincronizarDrive);
   $('btnExportar').addEventListener('click', exportarConsolidado);
   if ($('btnProbarApi')) $('btnProbarApi').addEventListener('click', probarConexion);
@@ -2145,9 +2285,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   restaurarUltimaSync();
   initTabsSecciones();
-  cargarDatos();
+  cargarSeleccion();
 
-  // v3.19.0 — AUTO-FETCH en segundo plano: relee las fuentes de Drive cada 3 min
-  // sin intervencion del usuario (servicio de actualizacion automatica).
-  setInterval(() => { if (CONFIG.apiUrl) _refrescoDirectoBackground(false); }, 180000);
+  // v4.1.0 — AUTO-FETCH en segundo plano: re-consulta los modulos actualmente
+  // seleccionados cada 3 min sin intervencion del usuario.
+  setInterval(() => { if (CONFIG.apiUrl) cargarSeleccion(true); }, 180000);
 });
