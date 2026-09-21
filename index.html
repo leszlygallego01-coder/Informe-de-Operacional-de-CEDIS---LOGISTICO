@@ -379,6 +379,40 @@
       <div class="mf-panel-body"><div class="chart-box"><canvas id="chartTiempos"></canvas></div></div></div></div>
   </div>
 
+  <!-- ==================== SELECTOR DE MODULOS A CONSULTAR (v4.1.0) ==================== -->
+  <div class="mf-panel mb-3" id="panelSeleccionModulos">
+    <div class="mf-panel-body py-2">
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        <span class="fw-bold text-primary">&#128194; M&oacute;dulos a consultar:</span>
+        <div class="form-check m-0">
+          <input class="form-check-input" type="checkbox" id="selMod_todos" checked>
+          <label class="form-check-label fw-bold" for="selMod_todos">Todos</label>
+        </div>
+        <div class="form-check m-0">
+          <input class="form-check-input selMod" type="checkbox" id="selMod_general" value="general" checked>
+          <label class="form-check-label" for="selMod_general">General</label>
+        </div>
+        <div class="form-check m-0">
+          <input class="form-check-input selMod" type="checkbox" id="selMod_recepcion" value="recepcion" checked>
+          <label class="form-check-label" for="selMod_recepcion">Recepci&oacute;n</label>
+        </div>
+        <div class="form-check m-0">
+          <input class="form-check-input selMod" type="checkbox" id="selMod_novedades" value="novedades" checked>
+          <label class="form-check-label" for="selMod_novedades">Novedades</label>
+        </div>
+        <div class="form-check m-0">
+          <input class="form-check-input selMod" type="checkbox" id="selMod_inventario" value="inventario" checked>
+          <label class="form-check-label" for="selMod_inventario">Inventario</label>
+        </div>
+        <div class="form-check m-0">
+          <input class="form-check-input selMod" type="checkbox" id="selMod_logistica" value="logistica" checked>
+          <label class="form-check-label" for="selMod_logistica">Log&iacute;stica</label>
+        </div>
+        <button class="btn btn-sm btn-primary fw-bold ms-auto" id="btnCargarSeleccion" title="Consulta en paralelo solo los modulos marcados">&#8681; Cargar / Consultar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== NAVEGACION POR SECCIONES (TABS) ==================== -->
   <ul class="nav nav-tabs mf-tabs-secciones mb-3 no-print" id="tabsSecciones" role="tablist">
     <li class="nav-item"><button type="button" class="nav-link active" data-seccion="panel_s1">1. Consolidado General</button></li>
