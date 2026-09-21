@@ -460,15 +460,15 @@ async function cargarDatos() {
 
   // ── FASE 1: Lectura del CONSOLIDADOR MAESTRO ──
   try {
-    console.log('[cargarDatos] FASE 1: Leyendo CONSOLIDADOR MAESTRO (5 pestanas, timeout 20s)...');
-    $('estadoApi').textContent = 'Leyendo maestro...';
-    const r = await api('consolidadoDesdeMaestro', {}, 20000);
+    console.log('[cargarDatos] FASE 1: Leyendo CONSOLIDADO JSON (obtenerConsolidadoJSON, timeout 20s)...');
+    $('estadoApi').textContent = 'Leyendo consolidado...';
+    const r = await api('obtenerConsolidadoJSON', {}, 20000);
 
     if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
       console.log('[cargarDatos] ✓ Maestro disponible. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
       _aplicarFuentes(r);
       $('estadoApi').className = 'badge bg-success';
-      $('estadoApi').textContent = r.origen === 'maestro' ? 'Maestro OK' : (r.origen === 'carpeta' ? 'Consolidado OK' : 'Datos OK');
+      $('estadoApi').textContent = r.origen === 'maestro' ? 'Maestro OK' : (r.origen === 'carpeta' ? 'Consolidado OK' : 'Consolidado JSON OK');
       exito = true;
     } else if (r.ok === false) {
       console.warn('[cargarDatos] Maestro sin datos (origen=' + r.origen + '), reintentando...');
@@ -492,7 +492,7 @@ async function cargarDatos() {
       $('estadoApi').textContent = 'Reintentando...';
       toast('Reintentando la lectura del Consolidador Maestro...', 'info', 4000);
 
-      const r2 = await api('consolidadoDesdeMaestro', {}, 40000);
+      const r2 = await api('obtenerConsolidadoJSON', {}, 40000);
 
       if (r2.ok && r2.fuentes && Object.keys(r2.fuentes).length > 0) {
         console.log('[cargarDatos] ✓ Maestro recibido en FASE 2. Fuentes:', Object.keys(r2.fuentes), 'origen:', r2.origen);
@@ -561,7 +561,7 @@ async function _refrescoDirectoBackground(forzarVisible) {
   try {
     // Relectura del CONSOLIDADOR MAESTRO (5 pestanas). El VISOR NO reconstruye:
     // el maestro lo alimenta el modulo de CARGUE. Aqui solo re-leemos (timeout 40s).
-    const r = await api('consolidadoDesdeMaestro', {}, 40000);
+    const r = await api('obtenerConsolidadoJSON', {}, 40000);
     if (r && r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
       _aplicarFuentes(r);
       const stamp = r.timestamp || new Date().toISOString();
@@ -591,6 +591,28 @@ async function _refrescoDirectoBackground(forzarVisible) {
 }
 
 /** _cargarFuentesLocales ELIMINADO en v3.10.0 — datos SIEMPRE desde Drive/Sheets */
+
+/**
+ * initTabsSecciones — v3.21.0. Navegacion por pestanas de las 5 secciones.
+ * Muestra solo el panel seleccionado (panel_s1..panel_s5) y oculta el resto.
+ * Los KPIs y graficas superiores permanecen siempre visibles.
+ */
+function initTabsSecciones() {
+  const barra = $('tabsSecciones');
+  if (!barra) return;
+  const botones = barra.querySelectorAll('button[data-seccion]');
+  function mostrar(idPanel) {
+    ['panel_s1', 'panel_s2', 'panel_s3', 'panel_s4', 'panel_s5'].forEach(id => {
+      const p = $(id);
+      if (p) p.style.display = (id === idPanel) ? '' : 'none';
+    });
+    botones.forEach(b => b.classList.toggle('active', b.getAttribute('data-seccion') === idPanel));
+  }
+  botones.forEach(b => {
+    b.addEventListener('click', () => mostrar(b.getAttribute('data-seccion')));
+  });
+  mostrar('panel_s1');
+}
 
 /** Aplica datos de respuesta API a FUENTES (sin localStorage backup — v3.10.0) */
 function _aplicarFuentes(r) {
@@ -2122,6 +2144,7 @@ document.addEventListener('DOMContentLoaded', () => {
     .forEach(id => { if ($(id)) $(id).addEventListener('change', refrescarTodo); });
 
   restaurarUltimaSync();
+  initTabsSecciones();
   cargarDatos();
 
   // v3.19.0 — AUTO-FETCH en segundo plano: relee las fuentes de Drive cada 3 min
