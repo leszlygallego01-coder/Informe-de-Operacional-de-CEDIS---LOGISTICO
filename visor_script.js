@@ -12,7 +12,7 @@
 
 const LS_KEY_VISOR = 'MF_CONFIG_VISOR';
 
-const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbzF9eo1awnxDAB05nE206hbez0CI1tEKqpiGZVKJOdYRQuu-d3GWVENwC_gmVafJwVh/exec';
+const VISOR_API_URL = 'https://script.google.com/macros/s/AKfycbzRzrDLoslnm5QD104gwW0xmKv5vuzB24UDaaoYrBhh8BbIWiiHw8dEJd00aaO_pSk/exec';
 
 const VISOR_DEFAULTS = {
   apiUrl: VISOR_API_URL,
@@ -460,15 +460,15 @@ async function cargarDatos() {
 
   // ── FASE 1: Lectura del CONSOLIDADOR MAESTRO ──
   try {
-    console.log('[cargarDatos] FASE 1: Leyendo CONSOLIDADO JSON (consolidado_operacion.json, timeout 15s)...');
-    $('estadoApi').textContent = 'Leyendo JSON...';
-    const r = await api('leerConsolidadoJSON', {}, 15000);
+    console.log('[cargarDatos] FASE 1: Leyendo CONSOLIDADOR MAESTRO (5 pestanas, timeout 20s)...');
+    $('estadoApi').textContent = 'Leyendo maestro...';
+    const r = await api('consolidadoDesdeMaestro', {}, 20000);
 
     if (r.ok && r.fuentes && Object.keys(r.fuentes).length > 0) {
-      console.log('[cargarDatos] ✓ Consolidado disponible. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
+      console.log('[cargarDatos] ✓ Maestro disponible. Fuentes:', Object.keys(r.fuentes), 'origen:', r.origen, 'timestamp:', r.timestamp);
       _aplicarFuentes(r);
       $('estadoApi').className = 'badge bg-success';
-      $('estadoApi').textContent = r.origen === 'json' ? 'JSON OK' : (r.origen === 'maestro' ? 'Maestro OK' : (r.origen === 'carpeta' ? 'Consolidado OK' : 'Datos OK'));
+      $('estadoApi').textContent = r.origen === 'maestro' ? 'Maestro OK' : (r.origen === 'carpeta' ? 'Consolidado OK' : 'Datos OK');
       exito = true;
     } else if (r.ok === false) {
       console.warn('[cargarDatos] Maestro sin datos (origen=' + r.origen + '), reintentando...');
@@ -487,12 +487,12 @@ async function cargarDatos() {
   // ── FASE 2: Si FASE 1 no entregó datos, retry con timeout mayor ──
   if (!exito) {
     try {
-      console.log('[cargarDatos] FASE 2: Reintentando lectura del consolidado (timeout 40s)...');
+      console.log('[cargarDatos] FASE 2: Reintentando lectura del maestro (timeout 40s)...');
       $('estadoApi').className = 'badge bg-warning text-dark';
       $('estadoApi').textContent = 'Reintentando...';
-      toast('Reintentando la lectura del Consolidado...', 'info', 4000);
+      toast('Reintentando la lectura del Consolidador Maestro...', 'info', 4000);
 
-      const r2 = await api('leerConsolidadoJSON', {}, 40000);
+      const r2 = await api('consolidadoDesdeMaestro', {}, 40000);
 
       if (r2.ok && r2.fuentes && Object.keys(r2.fuentes).length > 0) {
         console.log('[cargarDatos] ✓ Maestro recibido en FASE 2. Fuentes:', Object.keys(r2.fuentes), 'origen:', r2.origen);
